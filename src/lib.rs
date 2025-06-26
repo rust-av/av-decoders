@@ -8,6 +8,8 @@
 use crate::helpers::ffmpeg::FfmpegDecoder;
 #[cfg(feature = "vapoursynth")]
 use crate::helpers::vapoursynth::VapoursynthDecoder;
+#[cfg(feature = "vapoursynth")]
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{stdin, BufReader, Read, Stdin};
 use std::path::Path;
@@ -214,6 +216,136 @@ pub fn from_file<P: AsRef<Path>>(input: P) -> Result<Decoder<BufReader<File>>, D
     }
 
     Err(DecoderError::NoDecoder)
+}
+
+/// Creates a new decoder from a VapourSynth script.
+///
+/// This method allows you to create a decoder by providing a VapourSynth script directly
+/// as a string, rather than reading from a file. This is useful for dynamic video processing
+/// pipelines, custom filtering operations, or when you need to apply VapourSynth's advanced
+/// video processing capabilities programmatically.
+///
+/// VapourSynth scripts can include complex video processing operations, filters, and
+/// transformations that are not available through simple file-based decoders. This method
+/// provides access to the full power of the VapourSynth ecosystem.
+///
+/// # Requirements
+///
+/// This function is only available when the `vapoursynth` feature is enabled.
+///
+/// # Arguments
+///
+/// * `script` - A VapourSynth script as a string. The script should define a video node
+///   that will be used as the source for decoding. The script must be valid VapourSynth
+///   Python code that produces a video clip.
+///
+/// * `arguments` - Optional script arguments as key-value pairs. These will be passed
+///   to the VapourSynth environment and can be accessed within the script using
+///   `vs.get_output()` or similar mechanisms. Pass `None` if no arguments are needed.
+///
+/// # Returns
+///
+/// Returns a `Result` containing:
+/// - `Ok(Decoder<BufReader<File>>)` - A successfully initialized decoder using the script
+/// - `Err(DecoderError)` - An error if the script cannot be executed or produces invalid output
+///
+/// # Errors
+///
+/// This method will return an error if:
+/// - The VapourSynth script contains syntax errors (`DecoderError::GenericDecodeError`)
+/// - The script fails to execute or raises exceptions
+/// - The script does not produce a valid video output
+/// - Required VapourSynth plugins are not available
+/// - The VapourSynth environment cannot be initialized
+/// - The arguments cannot be set (`DecoderError::GenericDecodeError`)
+///
+/// # Examples
+///
+/// ```no_run
+/// use av_decoders::from_script;
+/// use std::collections::HashMap;
+///
+/// // Simple script that loads a video file
+/// let script = r#"
+/// import vapoursynth as vs
+/// core = vs.core
+/// clip = core.ffms2.Source("input.mkv")
+/// clip.set_output()
+/// "#;
+///
+/// let decoder = from_script(script, None)?;
+/// let details = decoder.get_video_details();
+/// println!("Video: {}x{} @ {} fps", details.width, details.height, details.frame_rate);
+///
+/// // Script with arguments for dynamic processing
+/// let script_with_args = r#"
+/// import vapoursynth as vs
+/// core = vs.core
+///
+/// # Get arguments passed from Rust
+/// filename = vs.get_output().get("filename", "default.mkv")
+/// resize_width = int(vs.get_output().get("width", "1920"))
+///
+/// clip = core.ffms2.Source(filename)
+/// clip = core.resize.Bicubic(clip, width=resize_width, height=clip.height * resize_width // clip.width)
+/// clip.set_output()
+/// "#;
+///
+/// let mut arguments = HashMap::new();
+/// arguments.insert("filename".to_string(), "video.mp4".to_string());
+/// arguments.insert("width".to_string(), "1280".to_string());
+///
+/// let mut decoder = from_script(script_with_args, Some(arguments))?;
+///
+/// // Read frames from the processed video
+/// while let Ok(frame) = decoder.read_video_frame::<u8>() {
+///     // Process the filtered frame...
+/// }
+/// # Ok::<(), av_decoders::DecoderError>(())
+/// ```
+///
+/// ## Advanced Usage
+///
+/// VapourSynth scripts can include complex filtering pipelines:
+///
+/// ```no_run
+/// # use av_decoders::from_script;
+/// let advanced_script = r#"
+/// import vapoursynth as vs
+/// core = vs.core
+///
+/// # Load source
+/// clip = core.ffms2.Source("input.mkv")
+///
+/// # Apply denoising
+/// clip = core.bm3d.BM3D(clip, sigma=3.0)
+///
+/// # Upscale using AI
+/// clip = core.waifu2x.Waifu2x(clip, noise=1, scale=2)
+///
+/// # Color correction
+/// clip = core.std.Levels(clip, min_in=16, max_in=235, min_out=0, max_out=255)
+///
+/// clip.set_output()
+/// "#;
+///
+/// let decoder = from_script(advanced_script, None)?;
+/// # Ok::<(), av_decoders::DecoderError>(())
+/// ```
+#[inline]
+#[cfg(feature = "vapoursynth")]
+pub fn from_script(
+    script: &str,
+    arguments: Option<HashMap<String, String>>,
+) -> Result<Decoder<BufReader<File>>, DecoderError> {
+    let mut dec = VapoursynthDecoder::from_script(script)?;
+    dec.set_arguments(arguments)?;
+    let decoder = DecoderImpl::Vapoursynth(dec);
+    let video_details = decoder.video_details()?;
+    Ok(Decoder {
+        decoder,
+        video_details,
+    })
 }
 
 /// Creates a new decoder that reads from standard input (stdin).

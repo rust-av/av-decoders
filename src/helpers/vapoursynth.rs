@@ -1,12 +1,14 @@
 use crate::error::DecoderError;
 use crate::VideoDetails;
 use num_rational::Rational32;
-use std::{mem::size_of, path::Path, slice};
+use std::{collections::HashMap, mem::size_of, path::Path, slice};
 use v_frame::{
     frame::Frame,
     pixel::{ChromaSampling, Pixel},
 };
 use vapoursynth::{
+    api::API,
+    map::OwnedMap,
     video_info::{Property, VideoInfo},
     vsscript::{Environment, EvalFlags},
 };
@@ -49,6 +51,63 @@ impl VapoursynthDecoder {
             frames_read: 0,
             total_frames,
         })
+    }
+
+    pub fn from_script(script: &str) -> Result<VapoursynthDecoder, DecoderError> {
+        let env = Environment::from_script(script).map_err(|e| match e {
+            vapoursynth::vsscript::Error::CStringConversion(_)
+            | vapoursynth::vsscript::Error::FileOpen(_)
+            | vapoursynth::vsscript::Error::FileRead(_)
+            | vapoursynth::vsscript::Error::PathInvalidUnicode => DecoderError::FileReadError {
+                cause: e.to_string(),
+            },
+            vapoursynth::vsscript::Error::VSScript(vsscript_error) => DecoderError::FileReadError {
+                cause: vsscript_error.to_string(),
+            },
+            vapoursynth::vsscript::Error::NoSuchVariable
+            | vapoursynth::vsscript::Error::NoCore
+            | vapoursynth::vsscript::Error::NoOutput
+            | vapoursynth::vsscript::Error::NoAPI => DecoderError::VapoursynthInternalError {
+                cause: e.to_string(),
+            },
+        })?;
+        let total_frames = {
+            let (node, _) = env
+                .get_output(OUTPUT_INDEX)
+                .map_err(|_| DecoderError::NoVideoStream)?;
+            get_num_frames(node.info())?
+        };
+        Ok(Self {
+            env,
+            frames_read: 0,
+            total_frames,
+        })
+    }
+
+    pub fn set_arguments(
+        &mut self,
+        arguments: Option<HashMap<String, String>>,
+    ) -> Result<(), DecoderError> {
+        let api = API::get().ok_or(DecoderError::VapoursynthInternalError {
+            cause: "failed to get Vapoursynth API instance".to_string(),
+        })?;
+        let mut arguments_map = OwnedMap::new(api);
+
+        if let Some(arguments) = arguments {
+            for (key, value) in arguments {
+                arguments_map
+                    .set_data(key.as_str(), value.as_bytes())
+                    .map_err(|e| DecoderError::VapoursynthArgsError {
+                        cause: e.to_string(),
+                    })?;
+            }
+        }
+
+        self.env
+            .set_variables(&arguments_map)
+            .map_err(|e| DecoderError::VapoursynthArgsError {
+                cause: e.to_string(),
+            })
     }
 
     pub fn get_video_details(&self) -> Result<VideoDetails, DecoderError> {

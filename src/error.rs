@@ -48,6 +48,16 @@ pub enum DecoderError {
         cause: String,
     },
 
+    /// Failure to set Vapoursynth script arguments.
+    ///
+    /// Only available when the `vapoursynth` feature is enabled.
+    #[cfg(feature = "vapoursynth")]
+    #[error("error setting Vapoursynth script args ({cause})")]
+    VapoursynthArgsError {
+        /// The underlying cause of the error
+        cause: String,
+    },
+
     /// Internal FFmpeg error.
     ///
     /// This error occurs when FFmpeg encounters an internal problem during
