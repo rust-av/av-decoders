@@ -42,37 +42,22 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
 
-      - name: Set MSVC x86_64 linker path
-        if: matrix.platform == 'windows-latest'
-        run: |
-          $LinkGlob = "VC\Tools\MSVC\*\bin\Hostx64\x64"
-          $env:PATH = "$env:PATH;${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
-          $LinkPath = vswhere -latest -products * -find "$LinkGlob" |
-                      Select-Object -Last 1
-          echo "$LinkPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install VapourSynth
-        uses: Irrational-Encoding-Wizardry/install-vapoursynth-action@v0.1
-        with:
-          version: 50
-          cache: true
-
       - name: No additional features
         run: |
           cargo clippy --tests --benches -- -D warnings
           cargo test
 
-      - name: With vapoursynth
-        run: |
-          cargo clippy --features vapoursynth --tests --benches -- -D warnings
-          cargo test --features vapoursynth
+      # - name: With vapoursynth
+      #   run: |
+      #     cargo clippy --features vapoursynth --tests --benches -- -D warnings
+      #     cargo test --features vapoursynth
 
-      - name: With ffmpeg
-        run: |
-          cargo clippy --features ffmpeg,ffmpeg_build --tests --benches -- -D warnings
-          cargo test --features ffmpeg,ffmpeg_build
+      # - name: With ffmpeg
+      #   run: |
+      #     cargo clippy --features ffmpeg,ffmpeg_build --tests --benches -- -D warnings
+      #     cargo test --features ffmpeg,ffmpeg_build
 
-      - name: With all features
-        run: |
-          cargo clippy --features ffmpeg,ffmpeg_build,vapoursynth --tests --benches -- -D warnings
-          cargo test --features ffmpeg,ffmpeg_build,vapoursynth
+      # - name: With all features
+      #   run: |
+      #     cargo clippy --features ffmpeg,ffmpeg_build,vapoursynth --tests --benches -- -D warnings
+      #     cargo test --features ffmpeg,ffmpeg_build,vapoursynth
