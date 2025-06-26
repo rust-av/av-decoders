@@ -51,26 +51,28 @@ jobs:
                       Select-Object -Last 1
           echo "$LinkPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - uses: FedericoCarboni/setup-ffmpeg@v3
+      - name: Install VapourSynth
+        uses: Irrational-Encoding-Wizardry/install-vapoursynth-action@v0.1
         with:
-          ffmpeg-version: release
+          version: 50
+          cache: true
 
       - name: No additional features
         run: |
           cargo clippy --tests --benches -- -D warnings
           cargo test
 
-      - name: With ffmpeg
-        run: |
-          cargo clippy --features ffmpeg,ffmpeg_static --tests --benches -- -D warnings
-          cargo test --features ffmpeg,ffmpeg_static
-
       - name: With vapoursynth
         run: |
           cargo clippy --features vapoursynth --tests --benches -- -D warnings
           cargo test --features vapoursynth
 
+      - name: With ffmpeg
+        run: |
+          cargo clippy --features ffmpeg,ffmpeg_build --tests --benches -- -D warnings
+          cargo test --features ffmpeg,ffmpeg_build
+
       - name: With all features
         run: |
-          cargo clippy --features ffmpeg,ffmpeg_static,vapoursynth --tests --benches -- -D warnings
-          cargo test --features ffmpeg,ffmpeg_static,vapoursynth
+          cargo clippy --features ffmpeg,ffmpeg_build,vapoursynth --tests --benches -- -D warnings
+          cargo test --features ffmpeg,ffmpeg_build,vapoursynth
