@@ -51,6 +51,10 @@ jobs:
                       Select-Object -Last 1
           echo "$LinkPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
+
       - name: No additional features
         run: |
           cargo clippy --tests --benches -- -D warnings
@@ -58,8 +62,8 @@ jobs:
 
       - name: With ffmpeg
         run: |
-          cargo clippy --features ffmpeg --tests --benches -- -D warnings
-          cargo test --features ffmpeg
+          cargo clippy --features ffmpeg,ffmpeg_static --tests --benches -- -D warnings
+          cargo test --features ffmpeg,ffmpeg_static
 
       - name: With vapoursynth
         run: |
@@ -68,8 +72,8 @@ jobs:
 
       - name: With all features
         run: |
-          cargo clippy --features ffmpeg,vapoursynth --tests --benches -- -D warnings
-          cargo test --features ffmpeg,vapoursynth
+          cargo clippy --features ffmpeg,ffmpeg_static,vapoursynth --tests --benches -- -D warnings
+          cargo test --features ffmpeg,ffmpeg_static,vapoursynth
 
   code-coverage:
     needs: [build]
