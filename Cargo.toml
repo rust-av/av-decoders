@@ -31,7 +31,7 @@ vapoursynth = ["dep:vapoursynth"]
 ffmpeg = ["dep:ffmpeg-the-third"]
 # Link a FFmpeg version built statically
 ffmpeg_static = ["ffmpeg-the-third/static"]
-# Build FFmpeg statically (https://github.com/zmwangx/rust-ffmpeg-sys/blob/master/Cargo.toml)
+# Build FFmpeg statically
 ffmpeg_build = ["ffmpeg-the-third/build", "ffmpeg-the-third/build-lib-dav1d"]
 
 [lints.rust]
