@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+/.idea
+/.vscode
+# since this is a library we ignore Cargo.lock
+Cargo.lock
