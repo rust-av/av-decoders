@@ -95,6 +95,10 @@ pub enum DecoderError {
     #[error("no decoder found which can decode this file--perhaps you need to enable the ffmpeg or vapoursynth feature")]
     NoDecoder,
 
+    /// The current decoder does not support the function which is being called.
+    #[error("this function is not supported by the decoder in use")]
+    UnsupportedDecoder,
+
     /// Variable format video clips are not supported.
     ///
     /// This error is returned when the video file contains streams with changing

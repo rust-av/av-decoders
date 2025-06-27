@@ -9,6 +9,7 @@ use v_frame::{
 use vapoursynth::{
     api::API,
     map::OwnedMap,
+    node::Node,
     video_info::{Property, VideoInfo},
     vsscript::{Environment, EvalFlags},
 };
@@ -182,6 +183,18 @@ impl VapoursynthDecoder {
             );
         }
         Ok(f)
+    }
+
+    pub(crate) fn get_env(&mut self) -> &mut Environment {
+        &mut self.env
+    }
+
+    pub(crate) fn get_output_node(&self) -> Node {
+        let (node, _) = self
+            .env
+            .get_output(OUTPUT_INDEX)
+            .expect("output node exists--validated during initialization");
+        node
     }
 }
 
