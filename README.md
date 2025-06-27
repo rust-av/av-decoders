@@ -1,5 +1,7 @@
 # av-decoders
 
+[![Crates.io Version](https://img.shields.io/crates/v/av-decoders)](https://crates.io/crates/av-decoders) [![docs.rs](https://img.shields.io/docsrs/av-decoders)](https://docs.rs/av-decoders/latest/av_decoders/)
+
 A unified Rust library for video decoding that provides a consistent interface across multiple decoding backends. Part of the rust-av ecosystem, outputting frames in the standard `v_frame` format.
 
 ## Features
