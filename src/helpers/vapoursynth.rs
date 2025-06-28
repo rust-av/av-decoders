@@ -16,6 +16,7 @@ use vapoursynth::{
 
 const OUTPUT_INDEX: i32 = 0;
 
+/// An interface that is used for decoding a video stream using Vapoursynth
 pub struct VapoursynthDecoder {
     env: Environment,
     frames_read: usize,
@@ -23,6 +24,71 @@ pub struct VapoursynthDecoder {
 }
 
 impl VapoursynthDecoder {
+    /// Creates a new VapourSynth decoder from a VapourSynth script file.
+    ///
+    /// This function loads and executes a VapourSynth script file (typically with a `.vpy` extension),
+    /// creates a VapourSynth environment, and initializes a decoder ready to read video frames.
+    /// The working directory is set to the directory containing the script file.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - A path to the VapourSynth script file to load. Can be any type that implements
+    ///   `AsRef<Path>`, such as `&str`, `String`, `PathBuf`, or `&Path`.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(VapoursynthDecoder)` on success, containing a configured decoder ready
+    /// to read video frames from the script's output node.
+    ///
+    /// # Errors
+    ///
+    /// This function can return several types of errors:
+    ///
+    /// * `DecoderError::FileReadError` - If the script file cannot be opened, read, or contains
+    ///   invalid content. This also covers VapourSynth script execution errors.
+    /// * `DecoderError::VapoursynthInternalError` - If there are internal VapourSynth API issues,
+    ///   missing core, no API access, or no output node defined
+    /// * `DecoderError::NoVideoStream` - If the script doesn't produce a valid output node
+    /// * `DecoderError::VariableFormat` - If the output has variable format (not supported)
+    /// * `DecoderError::VariableResolution` - If the output has variable resolution (not supported)
+    /// * `DecoderError::VariableFramerate` - If the output has variable framerate (not supported)
+    /// * `DecoderError::EndOfFile` - If the script produces zero frames
+    ///
+    /// # Requirements
+    ///
+    /// - VapourSynth must be installed and properly configured on the system
+    /// - The script file must define an output node (usually assigned to a variable)
+    /// - The output must have constant format, resolution, and framerate
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use av_decoders::VapoursynthDecoder;
+    ///
+    /// // Load a VapourSynth script file
+    /// let decoder = VapoursynthDecoder::new("script.vpy")?;
+    ///
+    /// // Using PathBuf
+    /// use std::path::PathBuf;
+    /// let script_path = PathBuf::from("processing_script.vpy");
+    /// let decoder = VapoursynthDecoder::new(&script_path)?;
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    ///
+    /// # VapourSynth Script Example
+    ///
+    /// A typical VapourSynth script file might look like:
+    /// ```python
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// # Load and process video
+    /// clip = core.ffms2.Source('input.mkv')
+    /// clip = core.resize.Bicubic(clip, width=1920, height=1080)
+    ///
+    /// # Set output
+    /// clip.set_output()
+    /// ```
     pub fn new<P: AsRef<Path>>(input: P) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_file(input, EvalFlags::SetWorkingDir).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
@@ -54,6 +120,85 @@ impl VapoursynthDecoder {
         })
     }
 
+    /// Creates a new VapourSynth decoder from a VapourSynth script string.
+    ///
+    /// This function executes a VapourSynth script provided as a string, creates a
+    /// VapourSynth environment, and initializes a decoder ready to read video frames.
+    /// This is useful for dynamically generated scripts or when you want to embed
+    /// the script directly in your code.
+    ///
+    /// # Arguments
+    ///
+    /// * `script` - A string containing the VapourSynth script code to execute.
+    ///   The script should define an output node using `clip.set_output()` or similar.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(VapoursynthDecoder)` on success, containing a configured decoder ready
+    /// to read video frames from the script's output node.
+    ///
+    /// # Errors
+    ///
+    /// This function can return several types of errors:
+    ///
+    /// * `DecoderError::FileReadError` - If the script contains syntax errors, references
+    ///   non-existent files, or fails during execution
+    /// * `DecoderError::VapoursynthInternalError` - If there are internal VapourSynth API issues,
+    ///   missing core, no API access, or no output node defined in the script
+    /// * `DecoderError::NoVideoStream` - If the script doesn't produce a valid output node
+    /// * `DecoderError::VariableFormat` - If the output has variable format (not supported)
+    /// * `DecoderError::VariableResolution` - If the output has variable resolution (not supported)
+    /// * `DecoderError::VariableFramerate` - If the output has variable framerate (not supported)
+    /// * `DecoderError::EndOfFile` - If the script produces zero frames
+    ///
+    /// # Requirements
+    ///
+    /// - VapourSynth must be installed and properly configured on the system
+    /// - The script must define an output node using `clip.set_output()` or equivalent
+    /// - The output must have constant format, resolution, and framerate
+    /// - Any file paths referenced in the script must be accessible
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use av_decoders::VapoursynthDecoder;
+    ///
+    /// // Simple script that loads a video file
+    /// let script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// clip = core.ffms2.Source('input.mp4')
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let decoder = VapoursynthDecoder::from_script(script)?;
+    ///
+    /// // More complex processing script
+    /// let processing_script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// # Load video
+    /// clip = core.ffms2.Source('raw_footage.mkv')
+    ///
+    /// # Apply denoising
+    /// clip = core.knlm.KNLMeansCL(clip, d=2, a=2, h=0.8)
+    ///
+    /// # Resize to 1080p
+    /// clip = core.resize.Bicubic(clip, width=1920, height=1080)
+    ///
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let decoder = VapoursynthDecoder::from_script(processing_script)?;
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    ///
+    /// # Performance Note
+    ///
+    /// VapourSynth scripts can be computationally intensive depending on the filters used.
+    /// Consider the processing requirements when designing your scripts.
     pub fn from_script(script: &str) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_script(script).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
@@ -85,7 +230,7 @@ impl VapoursynthDecoder {
         })
     }
 
-    pub fn set_arguments(
+    pub(crate) fn set_arguments(
         &mut self,
         arguments: Option<HashMap<String, String>>,
     ) -> Result<(), DecoderError> {
@@ -111,7 +256,7 @@ impl VapoursynthDecoder {
             })
     }
 
-    pub fn get_video_details(&self) -> Result<VideoDetails, DecoderError> {
+    pub(crate) fn get_video_details(&self) -> Result<VideoDetails, DecoderError> {
         let (node, _) = self
             .env
             .get_output(OUTPUT_INDEX)
@@ -128,7 +273,7 @@ impl VapoursynthDecoder {
     }
 
     #[allow(clippy::transmute_ptr_to_ptr)]
-    pub fn read_video_frame<T: Pixel>(
+    pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
     ) -> Result<Frame<T>, DecoderError> {

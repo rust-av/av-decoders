@@ -25,7 +25,7 @@ use crate::{error::DecoderError, VideoDetails};
 pub struct FfmpegDecoder {
     input_ctx: context::Input,
     decoder: decoder::Video,
-    pub video_details: VideoDetails,
+    pub(crate) video_details: VideoDetails,
     frameno: usize,
     stream_index: usize,
     end_of_stream: bool,
@@ -33,6 +33,66 @@ pub struct FfmpegDecoder {
 }
 
 impl FfmpegDecoder {
+    /// Creates a new FFmpeg decoder for the specified video file.
+    ///
+    /// This function initializes the FFmpeg library, opens the input video file,
+    /// finds the best video stream, and sets up a video decoder with frame-level
+    /// threading for optimal performance.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - A path to the video file to decode. Can be any type that implements
+    ///   `AsRef<Path>`, such as `&str`, `String`, `PathBuf`, or `&Path`.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(FfmpegDecoder)` on success, containing a configured decoder ready
+    /// to read video frames. The decoder will have its video details populated with
+    /// information extracted from the input file.
+    ///
+    /// # Errors
+    ///
+    /// This function can return several types of errors:
+    ///
+    /// * `DecoderError::FfmpegInternalError` - If FFmpeg initialization fails or
+    ///   if there's an internal FFmpeg error during codec context setup
+    /// * `DecoderError::FileReadError` - If the input file cannot be opened or read
+    /// * `DecoderError::NoVideoStream` - If no video stream is found in the input file
+    /// * `DecoderError::UnsupportedFormat` - If the video format is not supported.
+    ///   Currently supports YUV 4:2:0, 4:2:2, and 4:4:4 with 8, 10, or 12-bit depth
+    ///
+    /// # Supported Formats
+    ///
+    /// The decoder currently supports the following pixel formats:
+    /// - YUV420P, YUV422P, YUV444P (8-bit)
+    /// - YUVJ420P, YUVJ422P, YUVJ444P (8-bit JPEG colorspace)
+    /// - YUV420P10LE, YUV422P10LE, YUV444P10LE (10-bit)
+    /// - YUV420P12LE, YUV422P12LE, YUV444P12LE (12-bit)
+    ///
+    /// # Threading
+    ///
+    /// The decoder is configured with frame-level threading for improved performance
+    /// on multi-core systems.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use av_decoders::FfmpegDecoder;
+    ///
+    /// // Create decoder from string path
+    /// let decoder = FfmpegDecoder::new("input.mp4")?;
+    ///
+    /// // Create decoder from PathBuf
+    /// use std::path::PathBuf;
+    /// let path = PathBuf::from("input.mkv");
+    /// let decoder = FfmpegDecoder::new(&path)?;
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    ///
+    /// # Warning
+    ///
+    /// There have been desync issues reported with this decoder on some video files.
+    /// Use at your own risk for critical applications.
     #[inline]
     pub fn new<P: AsRef<Path>>(input: P) -> Result<Self, DecoderError> {
         ffmpeg::init().map_err(|e| DecoderError::FfmpegInternalError {
@@ -143,8 +203,7 @@ impl FfmpegDecoder {
         f
     }
 
-    #[inline]
-    pub fn read_video_frame<T: Pixel>(&mut self) -> Result<Frame<T>, DecoderError> {
+    pub(crate) fn read_video_frame<T: Pixel>(&mut self) -> Result<Frame<T>, DecoderError> {
         // For some reason there's a crap ton of work needed to get ffmpeg to do
         // something simple, because each codec has it's own stupid way of doing
         // things and they don't all decode the same way.

@@ -4,14 +4,10 @@
 //! Only the y4m decoder is enabled by default.
 //! Others must be enabled via Cargo features, since they require external dependencies.
 
-#[cfg(feature = "ffmpeg")]
-use crate::helpers::ffmpeg::FfmpegDecoder;
-#[cfg(feature = "vapoursynth")]
-use crate::helpers::vapoursynth::VapoursynthDecoder;
 #[cfg(feature = "vapoursynth")]
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{stdin, BufReader, Read, Stdin};
+use std::io::{stdin, BufReader, Read};
 use std::path::Path;
 use v_frame::frame::Frame;
 use v_frame::pixel::{ChromaSampling, Pixel};
@@ -19,7 +15,6 @@ use v_frame::pixel::{ChromaSampling, Pixel};
 use vapoursynth::node::Node;
 #[cfg(feature = "vapoursynth")]
 use vapoursynth::prelude::Environment;
-use y4m::Decoder as Y4mDecoder;
 
 mod error;
 mod helpers {
@@ -30,9 +25,14 @@ mod helpers {
     pub(crate) mod y4m;
 }
 
+#[cfg(feature = "ffmpeg")]
+pub use crate::helpers::ffmpeg::FfmpegDecoder;
+#[cfg(feature = "vapoursynth")]
+pub use crate::helpers::vapoursynth::VapoursynthDecoder;
 pub use error::DecoderError;
 pub use num_rational::Rational32;
 pub use v_frame;
+pub use y4m::Decoder as Y4mDecoder;
 
 const Y4M_EXTENSIONS: &[&str] = &["y4m", "yuv"];
 
@@ -101,10 +101,10 @@ impl Default for VideoDetails {
 /// ## Examples
 ///
 /// ```no_run
-/// use av_decoders::{from_file, from_stdin};
+/// use av_decoders::Decoder;
 ///
 /// // Decode from a file
-/// let mut decoder = from_file("video.y4m")?;
+/// let mut decoder = Decoder::from_file("video.y4m")?;
 /// let details = decoder.get_video_details();
 /// println!("Video: {}x{} @ {} fps", details.width, details.height, details.frame_rate);
 ///
@@ -114,312 +114,390 @@ impl Default for VideoDetails {
 /// }
 ///
 /// // Decode from stdin
-/// let mut stdin_decoder = from_stdin()?;
+/// let mut stdin_decoder = Decoder::from_stdin()?;
 /// let frame = stdin_decoder.read_video_frame::<u8>()?;
 /// # Ok::<(), av_decoders::DecoderError>(())
 /// ```
-pub struct Decoder<R: Read> {
-    decoder: DecoderImpl<R>,
+pub struct Decoder {
+    decoder: DecoderImpl,
     video_details: VideoDetails,
 }
 
-/// Creates a new decoder from a file path.
-///
-/// This method automatically detects the input format and selects the most appropriate
-/// decoder backend. It will prioritize Y4M files for performance, then VapourSynth
-/// for accuracy, and finally FFmpeg for broad format support.
-///
-/// # Arguments
-///
-/// * `input` - A path to the video file. Can be any type that implements `AsRef<Path>`,
-///   such as `&str`, `String`, `Path`, or `PathBuf`.
-///
-/// # Returns
-///
-/// Returns a `Result` containing:
-/// - `Ok(Decoder<BufReader<File>>)` - A successfully initialized decoder
-/// - `Err(DecoderError)` - An error if the file cannot be read or decoded
-///
-/// # Errors
-///
-/// This method will return an error if:
-/// - The file cannot be opened or read (`DecoderError::FileReadError`)
-/// - No suitable decoder backend is available (`DecoderError::NoDecoder`)
-/// - The file format is not supported or corrupted (`DecoderError::GenericDecodeError`)
-/// - Required features are not enabled for the file format
-///
-/// # Examples
-///
-/// ```no_run
-/// use av_decoders::from_file;
-/// use std::path::Path;
-///
-/// // From string path
-/// let decoder = from_file("video.y4m")?;
-///
-/// // From Path
-/// let path = Path::new("video.mp4");
-/// let decoder = from_file(path)?;
-///
-/// // From PathBuf
-/// let pathbuf = std::env::current_dir()?.join("video.mkv");
-/// let decoder = from_file(pathbuf)?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
-#[inline]
-#[allow(unreachable_code)]
-#[allow(clippy::needless_return)]
-pub fn from_file<P: AsRef<Path>>(input: P) -> Result<Decoder<BufReader<File>>, DecoderError> {
-    // A raw y4m parser is going to be the fastest with the least overhead,
-    // so we should use it if we have a y4m file.
-    let ext = input
-        .as_ref()
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_ascii_lowercase());
-    if let Some(ext) = ext.as_deref() {
-        if Y4M_EXTENSIONS.contains(&ext) {
-            let reader =
-                BufReader::new(File::open(input).map_err(|e| DecoderError::FileReadError {
-                    cause: e.to_string(),
-                })?);
-            let decoder = DecoderImpl::Y4m(y4m::decode(reader).map_err(|e| match e {
-                y4m::Error::EOF => DecoderError::EndOfFile,
-                _ => DecoderError::GenericDecodeError {
-                    cause: e.to_string(),
-                },
-            })?);
+impl Decoder {
+    /// Creates a new decoder from a file path.
+    ///
+    /// This method automatically detects the input format and selects the most appropriate
+    /// decoder backend. It will prioritize Y4M files for performance, then VapourSynth
+    /// for accuracy, and finally FFmpeg for broad format support.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - A path to the video file. Can be any type that implements `AsRef<Path>`,
+    ///   such as `&str`, `String`, `Path`, or `PathBuf`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok(Decoder<BufReader<File>>)` - A successfully initialized decoder
+    /// - `Err(DecoderError)` - An error if the file cannot be read or decoded
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - The file cannot be opened or read (`DecoderError::FileReadError`)
+    /// - No suitable decoder backend is available (`DecoderError::NoDecoder`)
+    /// - The file format is not supported or corrupted (`DecoderError::GenericDecodeError`)
+    /// - Required features are not enabled for the file format
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::Decoder;
+    /// use std::path::Path;
+    ///
+    /// // From string path
+    /// let decoder = Decoder::from_file("video.y4m")?;
+    ///
+    /// // From Path
+    /// let path = Path::new("video.mp4");
+    /// let decoder = Decoder::from_file(path)?;
+    ///
+    /// // From PathBuf
+    /// let pathbuf = std::env::current_dir()?.join("video.mkv");
+    /// let decoder = Decoder::from_file(pathbuf)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    #[allow(unreachable_code)]
+    #[allow(clippy::needless_return)]
+    pub fn from_file<P: AsRef<Path>>(input: P) -> Result<Decoder, DecoderError> {
+        // A raw y4m parser is going to be the fastest with the least overhead,
+        // so we should use it if we have a y4m file.
+        let ext = input
+            .as_ref()
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase());
+        if let Some(ext) = ext.as_deref() {
+            if Y4M_EXTENSIONS.contains(&ext) {
+                let reader =
+                    BufReader::new(File::open(input).map_err(|e| DecoderError::FileReadError {
+                        cause: e.to_string(),
+                    })?);
+                let decoder = DecoderImpl::Y4m(
+                    y4m::decode(Box::new(reader) as Box<dyn Read>).map_err(|e| match e {
+                        y4m::Error::EOF => DecoderError::EndOfFile,
+                        _ => DecoderError::GenericDecodeError {
+                            cause: e.to_string(),
+                        },
+                    })?,
+                );
+                let video_details = decoder.video_details()?;
+                return Ok(Decoder {
+                    decoder,
+                    video_details,
+                });
+            }
+        }
+
+        // Vapoursynth tends to give the most video metadata and have the best frame accuracy when seeking,
+        // so we should prioritize it over ffmpeg.
+        #[cfg(feature = "vapoursynth")]
+        {
+            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
                 video_details,
             });
         }
+
+        #[cfg(feature = "ffmpeg")]
+        {
+            let decoder = DecoderImpl::Ffmpeg(FfmpegDecoder::new(input)?);
+            let video_details = decoder.video_details()?;
+            return Ok(Decoder {
+                decoder,
+                video_details,
+            });
+        }
+
+        Err(DecoderError::NoDecoder)
     }
 
-    // Vapoursynth tends to give the most video metadata and have the best frame accuracy when seeking,
-    // so we should prioritize it over ffmpeg.
+    /// Creates a new decoder from a VapourSynth script.
+    ///
+    /// This method allows you to create a decoder by providing a VapourSynth script directly
+    /// as a string, rather than reading from a file. This is useful for dynamic video processing
+    /// pipelines, custom filtering operations, or when you need to apply VapourSynth's advanced
+    /// video processing capabilities programmatically.
+    ///
+    /// VapourSynth scripts can include complex video processing operations, filters, and
+    /// transformations that are not available through simple file-based decoders. This method
+    /// provides access to the full power of the VapourSynth ecosystem.
+    ///
+    /// # Requirements
+    ///
+    /// This function is only available when the `vapoursynth` feature is enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `script` - A VapourSynth script as a string. The script should define a video node
+    ///   that will be used as the source for decoding. The script must be valid VapourSynth
+    ///   Python code that produces a video clip.
+    ///
+    /// * `arguments` - Optional script arguments as key-value pairs. These will be passed
+    ///   to the VapourSynth environment and can be accessed within the script using
+    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no arguments are needed.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok(Decoder<BufReader<File>>)` - A successfully initialized decoder using the script
+    /// - `Err(DecoderError)` - An error if the script cannot be executed or produces invalid output
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - The VapourSynth script contains syntax errors (`DecoderError::GenericDecodeError`)
+    /// - The script fails to execute or raises exceptions
+    /// - The script does not produce a valid video output
+    /// - Required VapourSynth plugins are not available
+    /// - The VapourSynth environment cannot be initialized
+    /// - The arguments cannot be set (`DecoderError::GenericDecodeError`)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::Decoder;
+    /// use std::collections::HashMap;
+    ///
+    /// // Simple script that loads a video file
+    /// let script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    /// clip = core.ffms2.Source("input.mkv")
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let decoder = Decoder::from_script(script, None)?;
+    /// let details = decoder.get_video_details();
+    /// println!("Video: {}x{} @ {} fps", details.width, details.height, details.frame_rate);
+    ///
+    /// // Script with arguments for dynamic processing
+    /// let script_with_args = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// # Get arguments passed from Rust
+    /// filename = vs.get_output().get("filename", "default.mkv")
+    /// resize_width = int(vs.get_output().get("width", "1920"))
+    ///
+    /// clip = core.ffms2.Source(filename)
+    /// clip = core.resize.Bicubic(clip, width=resize_width, height=clip.height * resize_width // clip.width)
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let mut arguments = HashMap::new();
+    /// arguments.insert("filename".to_string(), "video.mp4".to_string());
+    /// arguments.insert("width".to_string(), "1280".to_string());
+    ///
+    /// let mut decoder = Decoder::from_script(script_with_args, Some(arguments))?;
+    ///
+    /// // Read frames from the processed video
+    /// while let Ok(frame) = decoder.read_video_frame::<u8>() {
+    ///     // Process the filtered frame...
+    /// }
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    ///
+    /// ## Advanced Usage
+    ///
+    /// VapourSynth scripts can include complex filtering pipelines:
+    ///
+    /// ```no_run
+    /// # use av_decoders::Decoder;
+    /// let advanced_script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// # Load source
+    /// clip = core.ffms2.Source("input.mkv")
+    ///
+    /// # Apply denoising
+    /// clip = core.bm3d.BM3D(clip, sigma=3.0)
+    ///
+    /// # Upscale using AI
+    /// clip = core.waifu2x.Waifu2x(clip, noise=1, scale=2)
+    ///
+    /// # Color correction
+    /// clip = core.std.Levels(clip, min_in=16, max_in=235, min_out=0, max_out=255)
+    ///
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let decoder = Decoder::from_script(advanced_script, None)?;
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    #[inline]
     #[cfg(feature = "vapoursynth")]
-    {
-        let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input)?);
+    pub fn from_script(
+        script: &str,
+        arguments: Option<HashMap<String, String>>,
+    ) -> Result<Decoder, DecoderError> {
+        let mut dec = VapoursynthDecoder::from_script(script)?;
+        dec.set_arguments(arguments)?;
+        let decoder = DecoderImpl::Vapoursynth(dec);
         let video_details = decoder.video_details()?;
-        return Ok(Decoder {
+        Ok(Decoder {
             decoder,
             video_details,
-        });
+        })
     }
 
-    #[cfg(feature = "ffmpeg")]
-    {
-        let decoder = DecoderImpl::Ffmpeg(FfmpegDecoder::new(input)?);
+    /// Creates a new decoder that reads from standard input (stdin).
+    ///
+    /// This method is useful for processing video data in pipelines or when the video
+    /// data is being streamed. Currently, only Y4M format is supported for stdin input.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok(Decoder<BufReader<Stdin>>)` - A successfully initialized decoder reading from stdin
+    /// - `Err(DecoderError)` - An error if stdin cannot be read or the data is not valid Y4M
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - The input stream is not in Y4M format
+    /// - The Y4M header is malformed or missing (`DecoderError::GenericDecodeError`)
+    /// - End of file is reached immediately (`DecoderError::EndOfFile`)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::Decoder;
+    ///
+    /// // Read Y4M data from stdin
+    /// let mut decoder = Decoder::from_stdin()?;
+    ///
+    /// // Process frames as they arrive
+    /// loop {
+    ///     match decoder.read_video_frame::<u8>() {
+    ///         Ok(frame) => {
+    ///             // Process the frame
+    ///             println!("Received frame: {}x{}", frame.planes[0].cfg.width, frame.planes[0].cfg.height);
+    ///         }
+    ///         Err(av_decoders::DecoderError::EndOfFile) => break,
+    ///         Err(e) => return Err(e),
+    ///     }
+    /// }
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    ///
+    /// ## Command Line Usage
+    ///
+    /// This is commonly used with command-line pipelines:
+    /// ```bash
+    /// # Pipe Y4M data to your application
+    /// ffmpeg -i input.mp4 -f yuv4mpegpipe - | your_app
+    ///
+    /// # Or directly from Y4M files
+    /// cat video.y4m | your_app
+    /// ```
+    #[inline]
+    pub fn from_stdin() -> Result<Decoder, DecoderError> {
+        // We can only support y4m for this
+        let reader = BufReader::new(stdin());
+        let decoder = DecoderImpl::Y4m(y4m::decode(Box::new(reader) as Box<dyn Read>).map_err(
+            |e| match e {
+                y4m::Error::EOF => DecoderError::EndOfFile,
+                _ => DecoderError::GenericDecodeError {
+                    cause: e.to_string(),
+                },
+            },
+        )?);
         let video_details = decoder.video_details()?;
-        return Ok(Decoder {
+        Ok(Decoder {
             decoder,
             video_details,
-        });
+        })
     }
 
-    Err(DecoderError::NoDecoder)
-}
+    /// Creates a new decoder from an existing decoder implementation.
+    ///
+    /// This method provides a way to construct a `Decoder` from a specific `DecoderImpl`
+    /// variant when you need direct control over the decoder backend selection. This is
+    /// typically used for advanced use cases where you want to bypass the automatic
+    /// format detection and backend selection logic of the other constructor methods.
+    ///
+    /// The method will extract the video metadata from the provided decoder implementation
+    /// and create a fully initialized `Decoder` instance ready for frame reading.
+    ///
+    /// # Arguments
+    ///
+    /// * `decoder_impl` - A specific decoder implementation variant (`DecoderImpl`).
+    ///   This can be one of:
+    ///   - `DecoderImpl::Y4m` for Y4M format decoding
+    ///   - `DecoderImpl::Vapoursynth` for VapourSynth-based decoding (requires `vapoursynth` feature)
+    ///   - `DecoderImpl::Ffmpeg` for FFmpeg-based decoding (requires `ffmpeg` feature)
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok(Decoder)` - A successfully initialized decoder using the provided implementation
+    /// - `Err(DecoderError)` - An error if video details cannot be extracted from the implementation
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - The decoder implementation is not properly initialized
+    /// - Video metadata cannot be extracted from the implementation (`DecoderError::GenericDecodeError`)
+    /// - The implementation is in an invalid state
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::{Decoder, DecoderImpl, Y4mDecoder};
+    /// use std::fs::File;
+    /// use std::io::{BufReader, Read};
+    ///
+    /// // Create a Y4M decoder implementation directly
+    /// let file = File::open("video.y4m")?;
+    /// let reader = BufReader::new(file);
+    /// let y4m_decoder = Y4mDecoder::new(Box::new(reader) as Box<dyn Read>)?;
+    /// let decoder_impl = DecoderImpl::Y4m(y4m_decoder);
+    ///
+    /// // Create a Decoder from the implementation
+    /// let decoder = Decoder::from_decoder_impl(decoder_impl)?;
+    /// let details = decoder.get_video_details();
+    /// println!("Video: {}x{}", details.width, details.height);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// ## Use Cases
+    ///
+    /// This method is particularly useful when:
+    /// - You need to pre-configure a specific decoder backend
+    /// - You want to bypass automatic format detection
+    /// - You're implementing custom decoder initialization logic
+    /// - You need to reuse or transfer decoder implementations between contexts
+    ///
+    /// ## Note
+    ///
+    /// This is an advanced method that exposes internal decoder implementation details.
+    /// In most cases, you should prefer using `from_file()`, `from_script()`, or
+    /// `from_stdin()` which provide safer, higher-level interfaces with automatic
+    /// format detection and backend selection.
+    #[inline]
+    pub fn from_decoder_impl(decoder_impl: DecoderImpl) -> Result<Decoder, DecoderError> {
+        let video_details = decoder_impl.video_details()?;
+        Ok(Decoder {
+            decoder: decoder_impl,
+            video_details,
+        })
+    }
 
-/// Creates a new decoder from a VapourSynth script.
-///
-/// This method allows you to create a decoder by providing a VapourSynth script directly
-/// as a string, rather than reading from a file. This is useful for dynamic video processing
-/// pipelines, custom filtering operations, or when you need to apply VapourSynth's advanced
-/// video processing capabilities programmatically.
-///
-/// VapourSynth scripts can include complex video processing operations, filters, and
-/// transformations that are not available through simple file-based decoders. This method
-/// provides access to the full power of the VapourSynth ecosystem.
-///
-/// # Requirements
-///
-/// This function is only available when the `vapoursynth` feature is enabled.
-///
-/// # Arguments
-///
-/// * `script` - A VapourSynth script as a string. The script should define a video node
-///   that will be used as the source for decoding. The script must be valid VapourSynth
-///   Python code that produces a video clip.
-///
-/// * `arguments` - Optional script arguments as key-value pairs. These will be passed
-///   to the VapourSynth environment and can be accessed within the script using
-///   `vs.get_output()` or similar mechanisms. Pass `None` if no arguments are needed.
-///
-/// # Returns
-///
-/// Returns a `Result` containing:
-/// - `Ok(Decoder<BufReader<File>>)` - A successfully initialized decoder using the script
-/// - `Err(DecoderError)` - An error if the script cannot be executed or produces invalid output
-///
-/// # Errors
-///
-/// This method will return an error if:
-/// - The VapourSynth script contains syntax errors (`DecoderError::GenericDecodeError`)
-/// - The script fails to execute or raises exceptions
-/// - The script does not produce a valid video output
-/// - Required VapourSynth plugins are not available
-/// - The VapourSynth environment cannot be initialized
-/// - The arguments cannot be set (`DecoderError::GenericDecodeError`)
-///
-/// # Examples
-///
-/// ```no_run
-/// use av_decoders::from_script;
-/// use std::collections::HashMap;
-///
-/// // Simple script that loads a video file
-/// let script = r#"
-/// import vapoursynth as vs
-/// core = vs.core
-/// clip = core.ffms2.Source("input.mkv")
-/// clip.set_output()
-/// "#;
-///
-/// let decoder = from_script(script, None)?;
-/// let details = decoder.get_video_details();
-/// println!("Video: {}x{} @ {} fps", details.width, details.height, details.frame_rate);
-///
-/// // Script with arguments for dynamic processing
-/// let script_with_args = r#"
-/// import vapoursynth as vs
-/// core = vs.core
-///
-/// # Get arguments passed from Rust
-/// filename = vs.get_output().get("filename", "default.mkv")
-/// resize_width = int(vs.get_output().get("width", "1920"))
-///
-/// clip = core.ffms2.Source(filename)
-/// clip = core.resize.Bicubic(clip, width=resize_width, height=clip.height * resize_width // clip.width)
-/// clip.set_output()
-/// "#;
-///
-/// let mut arguments = HashMap::new();
-/// arguments.insert("filename".to_string(), "video.mp4".to_string());
-/// arguments.insert("width".to_string(), "1280".to_string());
-///
-/// let mut decoder = from_script(script_with_args, Some(arguments))?;
-///
-/// // Read frames from the processed video
-/// while let Ok(frame) = decoder.read_video_frame::<u8>() {
-///     // Process the filtered frame...
-/// }
-/// # Ok::<(), av_decoders::DecoderError>(())
-/// ```
-///
-/// ## Advanced Usage
-///
-/// VapourSynth scripts can include complex filtering pipelines:
-///
-/// ```no_run
-/// # use av_decoders::from_script;
-/// let advanced_script = r#"
-/// import vapoursynth as vs
-/// core = vs.core
-///
-/// # Load source
-/// clip = core.ffms2.Source("input.mkv")
-///
-/// # Apply denoising
-/// clip = core.bm3d.BM3D(clip, sigma=3.0)
-///
-/// # Upscale using AI
-/// clip = core.waifu2x.Waifu2x(clip, noise=1, scale=2)
-///
-/// # Color correction
-/// clip = core.std.Levels(clip, min_in=16, max_in=235, min_out=0, max_out=255)
-///
-/// clip.set_output()
-/// "#;
-///
-/// let decoder = from_script(advanced_script, None)?;
-/// # Ok::<(), av_decoders::DecoderError>(())
-/// ```
-#[inline]
-#[cfg(feature = "vapoursynth")]
-pub fn from_script(
-    script: &str,
-    arguments: Option<HashMap<String, String>>,
-) -> Result<Decoder<BufReader<File>>, DecoderError> {
-    let mut dec = VapoursynthDecoder::from_script(script)?;
-    dec.set_arguments(arguments)?;
-    let decoder = DecoderImpl::Vapoursynth(dec);
-    let video_details = decoder.video_details()?;
-    Ok(Decoder {
-        decoder,
-        video_details,
-    })
-}
-
-/// Creates a new decoder that reads from standard input (stdin).
-///
-/// This method is useful for processing video data in pipelines or when the video
-/// data is being streamed. Currently, only Y4M format is supported for stdin input.
-///
-/// # Returns
-///
-/// Returns a `Result` containing:
-/// - `Ok(Decoder<BufReader<Stdin>>)` - A successfully initialized decoder reading from stdin
-/// - `Err(DecoderError)` - An error if stdin cannot be read or the data is not valid Y4M
-///
-/// # Errors
-///
-/// This method will return an error if:
-/// - The input stream is not in Y4M format
-/// - The Y4M header is malformed or missing (`DecoderError::GenericDecodeError`)
-/// - End of file is reached immediately (`DecoderError::EndOfFile`)
-///
-/// # Examples
-///
-/// ```no_run
-/// use av_decoders::from_stdin;
-///
-/// // Read Y4M data from stdin
-/// let mut decoder = from_stdin()?;
-///
-/// // Process frames as they arrive
-/// loop {
-///     match decoder.read_video_frame::<u8>() {
-///         Ok(frame) => {
-///             // Process the frame
-///             println!("Received frame: {}x{}", frame.planes[0].cfg.width, frame.planes[0].cfg.height);
-///         }
-///         Err(av_decoders::DecoderError::EndOfFile) => break,
-///         Err(e) => return Err(e),
-///     }
-/// }
-/// # Ok::<(), av_decoders::DecoderError>(())
-/// ```
-///
-/// ## Command Line Usage
-///
-/// This is commonly used with command-line pipelines:
-/// ```bash
-/// # Pipe Y4M data to your application
-/// ffmpeg -i input.mp4 -f yuv4mpegpipe - | your_app
-///
-/// # Or directly from Y4M files
-/// cat video.y4m | your_app
-/// ```
-#[inline]
-pub fn from_stdin() -> Result<Decoder<BufReader<Stdin>>, DecoderError> {
-    // We can only support y4m for this
-    let reader = BufReader::new(stdin());
-    let decoder = DecoderImpl::Y4m(y4m::decode(reader).map_err(|e| match e {
-        y4m::Error::EOF => DecoderError::EndOfFile,
-        _ => DecoderError::GenericDecodeError {
-            cause: e.to_string(),
-        },
-    })?);
-    let video_details = decoder.video_details()?;
-    Ok(Decoder {
-        decoder,
-        video_details,
-    })
-}
-
-impl<R: Read> Decoder<R> {
     /// Returns the video metadata and configuration details.
     ///
     /// This method provides access to the essential video properties that were detected
@@ -437,10 +515,10 @@ impl<R: Read> Decoder<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use av_decoders::from_file;
+    /// use av_decoders::Decoder;
     /// use v_frame::pixel::ChromaSampling;
     ///
-    /// let decoder = from_file("video.y4m").unwrap();
+    /// let decoder = Decoder::from_file("video.y4m").unwrap();
     /// let details = decoder.get_video_details();
     ///
     /// println!("Resolution: {}x{}", details.width, details.height);
@@ -490,9 +568,9 @@ impl<R: Read> Decoder<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use av_decoders::from_file;
+    /// use av_decoders::Decoder;
     ///
-    /// let mut decoder = from_file("video.y4m").unwrap();
+    /// let mut decoder = Decoder::from_file("video.y4m").unwrap();
     /// let details = decoder.get_video_details();
     ///
     /// // Read video frames, dynamically detecting the pixel type
@@ -559,9 +637,9 @@ impl<R: Read> Decoder<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use av_decoders::from_file;
+    /// use av_decoders::Decoder;
     ///
-    /// let mut decoder = from_file("video.mkv")?;
+    /// let mut decoder = Decoder::from_file("video.mkv")?;
     ///
     /// // Access the VapourSynth environment for advanced operations
     /// if let Ok(env) = decoder.get_vapoursynth_env() {
@@ -620,9 +698,9 @@ impl<R: Read> Decoder<R> {
     /// # Examples
     ///
     /// ```no_run
-    /// use av_decoders::from_file;
+    /// use av_decoders::Decoder;
     ///
-    /// let decoder = from_file("video.mkv")?;
+    /// let decoder = Decoder::from_file("video.mkv")?;
     ///
     /// // Get the VapourSynth node for advanced processing
     /// if let Ok(node) = decoder.get_vapoursynth_node() {
@@ -644,7 +722,7 @@ impl<R: Read> Decoder<R> {
     /// ## Advanced Usage
     ///
     /// ```no_run
-    /// # use av_decoders::from_script;
+    /// # use av_decoders::Decoder;
     /// # use std::collections::HashMap;
     /// // Create a decoder from a script
     /// let script = r#"
@@ -654,7 +732,7 @@ impl<R: Read> Decoder<R> {
     /// clip.set_output()
     /// "#;
     ///
-    /// let decoder = from_script(script, None)?;
+    /// let decoder = Decoder::from_script(script, None)?;
     ///
     /// // Get the node and use it for further processing
     /// let node = decoder.get_vapoursynth_node()?;
@@ -673,15 +751,40 @@ impl<R: Read> Decoder<R> {
     }
 }
 
-enum DecoderImpl<R: Read> {
-    Y4m(Y4mDecoder<R>),
+/// Internal enum representing different decoder backend implementations.
+///
+/// This enum is used internally by the `Decoder` struct to store the specific
+/// decoder implementation being used. The appropriate variant is selected automatically
+/// based on the input format and available features during decoder initialization.
+///
+/// Each variant wraps a different decoder backend, allowing the unified `Decoder`
+/// interface to support multiple video formats and processing libraries.
+pub enum DecoderImpl {
+    /// Y4M format decoder using the built-in y4m parser.
+    ///
+    /// This variant provides fast, low-overhead decoding of Y4M (YUV4MPEG2) format files.
+    /// It's always available and is preferred for Y4M files due to its performance characteristics.
+    /// The decoder reads from any source implementing the `Read` trait.
+    Y4m(Y4mDecoder<Box<dyn Read>>),
+
+    /// VapourSynth-based decoder for advanced video processing.
+    ///
+    /// This variant uses the VapourSynth framework for video decoding and processing.
+    /// It provides the most accurate metadata extraction and supports complex video
+    /// processing pipelines. Only available when the `vapoursynth` feature is enabled.
     #[cfg(feature = "vapoursynth")]
     Vapoursynth(VapoursynthDecoder),
+
+    /// FFmpeg-based decoder for general video format support.
+    ///
+    /// This variant uses FFmpeg for broad video format compatibility, serving as a
+    /// fallback decoder for formats not handled by other backends. Only available
+    /// when the `ffmpeg` feature is enabled.
     #[cfg(feature = "ffmpeg")]
     Ffmpeg(FfmpegDecoder),
 }
 
-impl<R: Read> DecoderImpl<R> {
+impl DecoderImpl {
     pub(crate) fn video_details(&self) -> Result<VideoDetails, DecoderError> {
         match self {
             Self::Y4m(dec) => Ok(helpers::y4m::get_video_details(dec)),
@@ -697,7 +800,7 @@ impl<R: Read> DecoderImpl<R> {
         cfg: &VideoDetails,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
-            Self::Y4m(dec) => helpers::y4m::read_video_frame::<R, T>(dec, cfg),
+            Self::Y4m(dec) => helpers::y4m::read_video_frame::<Box<dyn Read>, T>(dec, cfg),
             #[cfg(feature = "vapoursynth")]
             Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg),
             #[cfg(feature = "ffmpeg")]
