@@ -50,10 +50,10 @@ Available features:
 ### Basic Usage
 
 ```rust
-use av_decoders::{from_file, from_stdin};
+use av_decoders::Decoder;
 
 // Decode from a file
-let mut decoder = from_file("video.y4m")?;
+let mut decoder = Decoder::from_file("video.y4m")?;
 let details = decoder.get_video_details();
 println!("Video: {}x{} @ {} fps",
     details.width,
@@ -71,9 +71,9 @@ while let Ok(frame) = decoder.read_video_frame::<u8>() {
 ### Reading from stdin
 
 ```rust
-use av_decoders::from_stdin;
+use av_decoders::Decoder;
 
-let mut decoder = from_stdin()?;
+let mut decoder = Decoder::from_stdin()?;
 let frame = decoder.read_video_frame::<u8>()?;
 ```
 
@@ -101,8 +101,8 @@ println!("Frame rate: {}", details.frame_rate);
 
 ### Main Functions
 
-- `from_file(path)` - Create a decoder from a file path
-- `from_stdin()` - Create a decoder reading from stdin
+- `Decoder::from_file(path)` - Create a decoder from a file path
+- `Decoder::from_stdin()` - Create a decoder reading from stdin
 
 ### Decoder Methods
 
@@ -134,9 +134,9 @@ The library automatically selects the best decoder based on:
 ## Error Handling
 
 ```rust
-use av_decoders::{from_file, DecoderError};
+use av_decoders::{Decoder, DecoderError};
 
-match from_file("video.mp4") {
+match Decoder::from_file("video.mp4") {
     Ok(mut decoder) => {
         match decoder.read_video_frame::<u8>() {
             Ok(frame) => println!("Success!"),
@@ -156,11 +156,11 @@ match from_file("video.mp4") {
 ### Frame Processing Pipeline
 
 ```rust
-use av_decoders::from_file;
+use av_decoders::Decoder;
 use v_frame::pixel::ChromaSampling;
 
 fn process_video(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut decoder = from_file(path)?;
+    let mut decoder = Decoder::from_file(path)?;
     let details = decoder.get_video_details();
 
     // Process based on video characteristics
