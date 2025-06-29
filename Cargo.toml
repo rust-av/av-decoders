@@ -1,8 +1,9 @@
 [package]
 name = "av-decoders"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Josh Holmer <jholmer.in@gmail.com>"]
 edition = "2021"
+rust-version = "1.80"
 description = "Decoders for use in the rust-av ecosystem"
 license = "MIT"
 repository = "https://github.com/rust-av/av-decoders"
