@@ -28,6 +28,8 @@ mod helpers {
 #[cfg(feature = "ffmpeg")]
 pub use crate::helpers::ffmpeg::FfmpegDecoder;
 #[cfg(feature = "vapoursynth")]
+pub use crate::helpers::vapoursynth::ModifyNode;
+#[cfg(feature = "vapoursynth")]
 pub use crate::helpers::vapoursynth::VapoursynthDecoder;
 pub use error::DecoderError;
 pub use num_rational::Rational32;
@@ -170,7 +172,10 @@ impl Decoder {
     #[inline]
     #[allow(unreachable_code)]
     #[allow(clippy::needless_return)]
-    pub fn from_file<P: AsRef<Path>>(input: P) -> Result<Decoder, DecoderError> {
+    pub fn from_file<P: AsRef<Path>>(
+        input: P,
+        modify_node: Option<ModifyNode>,
+    ) -> Result<Decoder, DecoderError> {
         // A raw y4m parser is going to be the fastest with the least overhead,
         // so we should use it if we have a y4m file.
         let ext = input
@@ -204,7 +209,7 @@ impl Decoder {
         // so we should prioritize it over ffmpeg.
         #[cfg(feature = "vapoursynth")]
         {
-            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input)?);
+            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input, modify_node)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
@@ -344,8 +349,9 @@ impl Decoder {
     pub fn from_script(
         script: &str,
         arguments: Option<HashMap<String, String>>,
+        modify_node: Option<ModifyNode>,
     ) -> Result<Decoder, DecoderError> {
-        let mut dec = VapoursynthDecoder::from_script(script)?;
+        let mut dec = VapoursynthDecoder::from_script(script, modify_node)?;
         dec.set_arguments(arguments)?;
         let decoder = DecoderImpl::Vapoursynth(dec);
         let video_details = decoder.video_details()?;
