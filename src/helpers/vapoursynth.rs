@@ -8,6 +8,7 @@ use v_frame::{
 };
 use vapoursynth::{
     api::API,
+    core::CoreRef,
     map::OwnedMap,
     node::Node,
     video_info::{Property, VideoInfo},
@@ -16,9 +17,22 @@ use vapoursynth::{
 
 const OUTPUT_INDEX: i32 = 0;
 
+// TODO: this is boilerplate
+/// A callback function that is used to modify the Vapoursynth node before it is used to decode frames.
+///
+/// This allows the user to modify the node to suit their needs, such as adding filters, changing the output format, etc.
+///
+/// The callback is called with the `CoreRef` of the core and the node that is about to be used for decoding.
+///
+/// The callback should return the modified node, or an error if the modification failed.
+pub type ModifyNode = Box<
+    dyn for<'core> Fn(CoreRef<'core>, Node<'core>) -> Result<Node<'core>, DecoderError> + 'static,
+>;
+
 /// An interface that is used for decoding a video stream using Vapoursynth
 pub struct VapoursynthDecoder {
     env: Environment,
+    modify_node: Option<ModifyNode>,
     frames_read: usize,
     total_frames: usize,
 }
@@ -89,7 +103,11 @@ impl VapoursynthDecoder {
     /// # Set output
     /// clip.set_output()
     /// ```
-    pub fn new<P: AsRef<Path>>(input: P) -> Result<VapoursynthDecoder, DecoderError> {
+    #[inline]
+    pub fn new<P: AsRef<Path>>(
+        input: P,
+        modify_node: Option<ModifyNode>,
+    ) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_file(input, EvalFlags::SetWorkingDir).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
             | vapoursynth::vsscript::Error::FileOpen(_)
@@ -111,10 +129,25 @@ impl VapoursynthDecoder {
             let (node, _) = env
                 .get_output(OUTPUT_INDEX)
                 .map_err(|_| DecoderError::NoVideoStream)?;
+
+            let node = if let Some(callback) = modify_node.as_ref() {
+                let core = env
+                    .get_core()
+                    .map_err(|e| DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    })?;
+                callback(core, node).map_err(|e| DecoderError::VapoursynthInternalError {
+                    cause: e.to_string(),
+                })?
+            } else {
+                node
+            };
+
             get_num_frames(node.info())?
         };
         Ok(Self {
             env,
+            modify_node,
             frames_read: 0,
             total_frames,
         })
@@ -199,7 +232,11 @@ impl VapoursynthDecoder {
     ///
     /// VapourSynth scripts can be computationally intensive depending on the filters used.
     /// Consider the processing requirements when designing your scripts.
-    pub fn from_script(script: &str) -> Result<VapoursynthDecoder, DecoderError> {
+    #[inline]
+    pub fn from_script(
+        script: &str,
+        modify_node: Option<ModifyNode>,
+    ) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_script(script).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
             | vapoursynth::vsscript::Error::FileOpen(_)
@@ -221,10 +258,25 @@ impl VapoursynthDecoder {
             let (node, _) = env
                 .get_output(OUTPUT_INDEX)
                 .map_err(|_| DecoderError::NoVideoStream)?;
+
+            let node = if let Some(callback) = modify_node.as_ref() {
+                let core = env
+                    .get_core()
+                    .map_err(|e| DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    })?;
+                callback(core, node).map_err(|e| DecoderError::VapoursynthInternalError {
+                    cause: e.to_string(),
+                })?
+            } else {
+                node
+            };
+
             get_num_frames(node.info())?
         };
         Ok(Self {
             env,
+            modify_node,
             frames_read: 0,
             total_frames,
         })
@@ -257,10 +309,27 @@ impl VapoursynthDecoder {
     }
 
     pub(crate) fn get_video_details(&self) -> Result<VideoDetails, DecoderError> {
-        let (node, _) = self
-            .env
-            .get_output(OUTPUT_INDEX)
-            .expect("output node exists--validated during initialization");
+        let node = {
+            let (output_node, _) = self
+                .env
+                .get_output(OUTPUT_INDEX)
+                .expect("output node exists--validated during initialization");
+            if let Some(modify_node) = self.modify_node.as_ref() {
+                let core =
+                    self.env
+                        .get_core()
+                        .map_err(|e| DecoderError::VapoursynthInternalError {
+                            cause: e.to_string(),
+                        })?;
+                modify_node(core, output_node).map_err(|e| {
+                    DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    }
+                })?
+            } else {
+                output_node
+            }
+        };
         let info = node.info();
         let (width, height) = get_resolution(info)?;
         Ok(VideoDetails {
@@ -287,10 +356,28 @@ impl VapoursynthDecoder {
             return Err(DecoderError::EndOfFile);
         }
 
-        let (node, _) = self
-            .env
-            .get_output(OUTPUT_INDEX)
-            .expect("output node exists--validated during initialization");
+        let node = {
+            let (output_node, _) = self
+                .env
+                .get_output(OUTPUT_INDEX)
+                .expect("output node exists--validated during initialization");
+            if let Some(modify_node) = self.modify_node.as_ref() {
+                let core =
+                    self.env
+                        .get_core()
+                        .map_err(|e| DecoderError::VapoursynthInternalError {
+                            cause: e.to_string(),
+                        })?;
+                modify_node(core, output_node).map_err(|e| {
+                    DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    }
+                })?
+            } else {
+                output_node
+            }
+        };
+
         let vs_frame = node
             .get_frame(self.frames_read)
             .map_err(|_| DecoderError::EndOfFile)?;
