@@ -89,6 +89,7 @@ impl VapoursynthDecoder {
     /// # Set output
     /// clip.set_output()
     /// ```
+    #[inline]
     pub fn new<P: AsRef<Path>>(input: P) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_file(input, EvalFlags::SetWorkingDir).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
@@ -199,6 +200,7 @@ impl VapoursynthDecoder {
     ///
     /// VapourSynth scripts can be computationally intensive depending on the filters used.
     /// Consider the processing requirements when designing your scripts.
+    #[inline]
     pub fn from_script(script: &str) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_script(script).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
