@@ -45,3 +45,10 @@ missing_errors_doc = "warn"
 missing_panics_doc = "warn"
 missing_safety_doc = "warn"
 unwrap_used = "warn"
+
+[dev-dependencies]
+criterion = "0.6.0"
+
+[[bench]]
+name = "decoders_bench"
+harness = false
