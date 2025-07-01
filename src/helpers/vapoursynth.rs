@@ -117,10 +117,7 @@ impl VapoursynthDecoder {
     /// clip.set_output()
     /// ```
     #[inline]
-    pub fn new<P: AsRef<Path>>(
-        input: P,
-        // modify_node: Option<ModifyNode>,
-    ) -> Result<VapoursynthDecoder, DecoderError> {
+    pub fn new<P: AsRef<Path>>(input: P) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_file(input, EvalFlags::SetWorkingDir).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
             | vapoursynth::vsscript::Error::FileOpen(_)
