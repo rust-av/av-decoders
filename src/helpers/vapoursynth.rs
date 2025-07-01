@@ -524,12 +524,10 @@ impl VapoursynthDecoder {
         })?;
         let modified_node = modify_node(core, output_node)?;
 
-        // Lazy load the total frame count
-        if self.total_frames.is_none() {
-            let (video_details, total_frames) = parse_video_details(modified_node.info())?;
-            self.video_details = Some(video_details);
-            self.total_frames = Some(total_frames);
-        }
+        // Set the updated video details and total frames
+        let (video_details, total_frames) = parse_video_details(modified_node.info())?;
+        self.video_details = Some(video_details);
+        self.total_frames = Some(total_frames);
         // Register the node modifier to be used during read_video_frame
         self.modify_node = Some(modify_node);
 
