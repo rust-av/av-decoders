@@ -304,7 +304,8 @@ impl VapoursynthDecoder {
     /// clip = core.ffms2.Source('input.mp4')[start:]
     /// clip.set_output()
     /// ```
-    pub(crate) fn set_variables(
+    #[inline]
+    pub fn set_variables(
         &mut self,
         variables: HashMap<VariableName, VariableValue>,
     ) -> Result<(), DecoderError> {
