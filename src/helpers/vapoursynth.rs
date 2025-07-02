@@ -8,6 +8,7 @@ use v_frame::{
 };
 use vapoursynth::{
     api::API,
+    core::CoreRef,
     map::OwnedMap,
     node::Node,
     video_info::{Property, VideoInfo},
@@ -16,11 +17,37 @@ use vapoursynth::{
 
 const OUTPUT_INDEX: i32 = 0;
 
+// TODO: this is boilerplate
+/// A callback function that is used to modify the Vapoursynth node before it is used to decode frames.
+///
+/// This allows the user to modify the node to suit their needs, such as adding filters, changing the output format, etc.
+///
+/// The callback is called with the `CoreRef` of the core and the node that is about to be used for decoding.
+///
+/// The callback should return the modified node, or an error if the modification failed.
+pub type ModifyNode = Box<
+    dyn for<'core> Fn(CoreRef<'core>, Node<'core>) -> Result<Node<'core>, DecoderError> + 'static,
+>;
+/// The number of frames in the output video node.
+pub type TotalFrames = usize;
+// The width of the output video node.
+pub type Width = usize;
+// The height of the output video node.
+pub type Height = usize;
+// The bit depth of the output video node.
+pub type BitDepth = usize;
+// The name of the variable to set in the VapourSynth environment.
+pub type VariableName = String;
+// The value of the variable to set in the VapourSynth environment.
+pub type VariableValue = String;
+
 /// An interface that is used for decoding a video stream using Vapoursynth
 pub struct VapoursynthDecoder {
     env: Environment,
+    modify_node: Option<ModifyNode>,
     frames_read: usize,
-    total_frames: usize,
+    total_frames: Option<TotalFrames>,
+    video_details: Option<VideoDetails>,
 }
 
 impl VapoursynthDecoder {
@@ -108,16 +135,12 @@ impl VapoursynthDecoder {
                 cause: e.to_string(),
             },
         })?;
-        let total_frames = {
-            let (node, _) = env
-                .get_output(OUTPUT_INDEX)
-                .map_err(|_| DecoderError::NoVideoStream)?;
-            get_num_frames(node.info())?
-        };
         Ok(Self {
             env,
+            modify_node: None,
             frames_read: 0,
-            total_frames,
+            total_frames: None,
+            video_details: None,
         })
     }
 
@@ -219,59 +242,99 @@ impl VapoursynthDecoder {
                 cause: e.to_string(),
             },
         })?;
-        let total_frames = {
-            let (node, _) = env
-                .get_output(OUTPUT_INDEX)
-                .map_err(|_| DecoderError::NoVideoStream)?;
-            get_num_frames(node.info())?
-        };
         Ok(Self {
             env,
+            modify_node: None,
             frames_read: 0,
-            total_frames,
+            total_frames: None,
+            video_details: None,
         })
     }
 
-    pub(crate) fn set_arguments(
+    /// Sets the variables in the VapourSynth environment.
+    ///
+    /// This function sets the variables in the VapourSynth environment provided
+    /// in the `variables` HashMap.
+    ///
+    /// # Arguments
+    ///
+    /// * `variables` - A `std::collections::HashMap<VariableName, VariableValue>`
+    ///   containing the variable names and values to set. These will be passed to the
+    ///   VapourSynth environment and can be accessed within the script using
+    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no variables are needed.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `DecoderError::VapoursynthArgsError` if there is an error setting the variables.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use av_decoders::VapoursynthDecoder;
+    /// use std::collections::HashMap;
+    ///
+    /// // Load a VapourSynth script file
+    /// let mut decoder = VapoursynthDecoder::new("script.vpy");
+    ///
+    /// let variables = HashMap::from([
+    ///     ("message".to_string(), "fluffy kittens".to_string()),
+    ///     ("start_frame".to_string(), "82".to_string()),
+    /// ]);
+    ///
+    /// decoder.set_variables(variables)?;
+    /// ```
+    ///
+    /// # VapourSynth Script Example
+    ///
+    /// A typical VapourSynth script might look like:
+    /// ```python
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// start = parseInt(vs.get_output("start_frame", "100"))
+    /// things = vs.get_output("message", "prancing ponies")
+    /// print("We need more " + things + "!")
+    /// clip = core.ffms2.Source('input.mp4')[start:]
+    /// clip.set_output()
+    /// ```
+    #[inline]
+    pub fn set_variables(
         &mut self,
-        arguments: Option<HashMap<String, String>>,
+        variables: HashMap<VariableName, VariableValue>,
     ) -> Result<(), DecoderError> {
         let api = API::get().ok_or(DecoderError::VapoursynthInternalError {
             cause: "failed to get Vapoursynth API instance".to_string(),
         })?;
-        let mut arguments_map = OwnedMap::new(api);
+        let mut variables_map = OwnedMap::new(api);
 
-        if let Some(arguments) = arguments {
-            for (key, value) in arguments {
-                arguments_map
-                    .set_data(key.as_str(), value.as_bytes())
-                    .map_err(|e| DecoderError::VapoursynthArgsError {
-                        cause: e.to_string(),
-                    })?;
-            }
+        for (name, value) in variables {
+            variables_map
+                .set_data(name.as_str(), value.as_bytes())
+                .map_err(|e| DecoderError::VapoursynthArgsError {
+                    cause: e.to_string(),
+                })?;
         }
 
         self.env
-            .set_variables(&arguments_map)
+            .set_variables(&variables_map)
             .map_err(|e| DecoderError::VapoursynthArgsError {
                 cause: e.to_string(),
             })
     }
 
     pub(crate) fn get_video_details(&self) -> Result<VideoDetails, DecoderError> {
-        let (node, _) = self
-            .env
-            .get_output(OUTPUT_INDEX)
-            .expect("output node exists--validated during initialization");
-        let info = node.info();
-        let (width, height) = get_resolution(info)?;
-        Ok(VideoDetails {
-            width,
-            height,
-            bit_depth: get_bit_depth(info)?,
-            chroma_sampling: get_chroma_sampling(info)?,
-            frame_rate: get_frame_rate(info)?,
-        })
+        match self.video_details {
+            Some(details) => Ok(details),
+            None => {
+                let node = self.get_output_node();
+                let (details, _) = parse_video_details(node.info())?;
+                Ok(details)
+            }
+        }
     }
 
     #[allow(clippy::transmute_ptr_to_ptr)]
@@ -285,14 +348,42 @@ impl VapoursynthDecoder {
         const FRAME_MARGIN: usize = 16 + SUBPEL_FILTER_SIZE;
         const LUMA_PADDING: usize = SB_SIZE + FRAME_MARGIN;
 
-        if self.frames_read >= self.total_frames {
+        if self
+            .total_frames
+            .is_some_and(|total_frames| self.frames_read >= total_frames)
+        {
             return Err(DecoderError::EndOfFile);
         }
 
-        let (node, _) = self
-            .env
-            .get_output(OUTPUT_INDEX)
-            .expect("output node exists--validated during initialization");
+        let node = {
+            let (output_node, _) = self
+                .env
+                .get_output(OUTPUT_INDEX)
+                .expect("output node exists--validated during initialization");
+            if let Some(modify_node) = self.modify_node.as_ref() {
+                let core =
+                    self.env
+                        .get_core()
+                        .map_err(|e| DecoderError::VapoursynthInternalError {
+                            cause: e.to_string(),
+                        })?;
+                modify_node(core, output_node).map_err(|e| {
+                    DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    }
+                })?
+            } else {
+                output_node
+            }
+        };
+
+        // Lazy load the total frame count
+        if self.total_frames.is_none() {
+            let (video_details, total_frames) = parse_video_details(node.info())?;
+            self.video_details = Some(video_details);
+            self.total_frames = Some(total_frames);
+        }
+
         let vs_frame = node
             .get_frame(self.frames_read)
             .map_err(|_| DecoderError::EndOfFile)?;
@@ -332,21 +423,118 @@ impl VapoursynthDecoder {
         Ok(f)
     }
 
+    /// Get the VapourSynth environment.
+    ///
+    /// This function returns a mutable reference to the
+    /// VapourSynth environment created during initialization.
+    ///
+    /// # Returns
+    ///
+    /// Returns `&mut vapoursynth::vsscript::Environment`.
     pub(crate) fn get_env(&mut self) -> &mut Environment {
         &mut self.env
     }
 
+    /// Get the VapourSynth output node.
+    ///
+    /// This function returns a reference to the
+    /// VapourSynth output node created during initialization.
+    ///
+    /// If a node modifier has been registered using `VapoursynthDecoder::register_node_modifier()`,
+    /// the modified node will be returned instead.
+    ///
+    /// # Returns
+    ///
+    /// Returns `vapoursynth::vsscript::Node`.
     pub(crate) fn get_output_node(&self) -> Node {
-        let (node, _) = self
-            .env
-            .get_output(OUTPUT_INDEX)
-            .expect("output node exists--validated during initialization");
+        let node = {
+            let (output_node, _) = self
+                .env
+                .get_output(OUTPUT_INDEX)
+                .expect("output node exists--validated during initialization");
+            if let Some(modify_node) = self.modify_node.as_ref() {
+                let core = self
+                    .env
+                    .get_core()
+                    .expect("core exists--validated during initialization");
+                modify_node(core, output_node)
+                    .expect("modified node exists--validated during registration")
+            } else {
+                output_node
+            }
+        };
         node
+    }
+
+    /// Register a callback function that modifies the VapourSynth output node
+    /// created during initializaation.
+    ///
+    /// # Arguments
+    ///
+    /// * `modify_node` - The callback function that modifies and returns the VapourSynth
+    ///   output node given a `vapoursynth::vsscript::CoreRef` and a `vapoursynth::vsscript::Node`.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(vapoursynth::vsscript::Node)` on success, containing the modified node ready
+    /// to be used for decoding video frames.
+    ///
+    /// # Errors
+    ///
+    /// This function can return several types of errors:
+    ///
+    /// * `DecoderError::FileReadError` - If the script contains syntax errors, references
+    ///   non-existent files, or fails during execution
+    /// * `DecoderError::VapoursynthInternalError` - If there are internal VapourSynth API issues,
+    ///   missing core, no API access, or no valid output node returned
+    /// * `DecoderError::NoVideoStream` - If the script doesn't produce a valid output node
+    /// * `DecoderError::VariableFormat` - If the output has variable format (not supported)
+    /// * `DecoderError::VariableResolution` - If the output has variable resolution (not supported)
+    /// * `DecoderError::VariableFramerate` - If the output has variable framerate (not supported)
+    /// * `DecoderError::EndOfFile` - If the script produces zero frames
+    #[inline]
+    pub fn register_node_modifier(
+        &mut self,
+        modify_node: ModifyNode,
+    ) -> Result<Node, DecoderError> {
+        let core = self
+            .env
+            .get_core()
+            .map_err(|e| DecoderError::VapoursynthInternalError {
+                cause: e.to_string(),
+            })?;
+        let (output_node, _) = self.env.get_output(OUTPUT_INDEX).map_err(|e| match e {
+            vapoursynth::vsscript::Error::CStringConversion(_)
+            | vapoursynth::vsscript::Error::FileOpen(_)
+            | vapoursynth::vsscript::Error::FileRead(_)
+            | vapoursynth::vsscript::Error::PathInvalidUnicode => DecoderError::FileReadError {
+                cause: e.to_string(),
+            },
+            vapoursynth::vsscript::Error::VSScript(vsscript_error) => DecoderError::FileReadError {
+                cause: vsscript_error.to_string(),
+            },
+            vapoursynth::vsscript::Error::NoSuchVariable
+            | vapoursynth::vsscript::Error::NoCore
+            | vapoursynth::vsscript::Error::NoOutput
+            | vapoursynth::vsscript::Error::NoAPI => DecoderError::VapoursynthInternalError {
+                cause: e.to_string(),
+            },
+        })?;
+        let modified_node = modify_node(core, output_node)?;
+
+        // Set the updated video details and total frames
+        let (video_details, total_frames) = parse_video_details(modified_node.info())?;
+        self.video_details = Some(video_details);
+        self.total_frames = Some(total_frames);
+        // Register the node modifier to be used during read_video_frame
+        self.modify_node = Some(modify_node);
+
+        Ok(modified_node)
     }
 }
 
 /// Get the number of frames from a Vapoursynth `VideoInfo` struct.
-fn get_num_frames(info: VideoInfo) -> Result<usize, DecoderError> {
+fn get_num_frames(info: VideoInfo) -> Result<TotalFrames, DecoderError> {
     let num_frames = {
         if Property::Variable == info.format {
             return Err(DecoderError::VariableFormat);
@@ -369,7 +557,7 @@ fn get_num_frames(info: VideoInfo) -> Result<usize, DecoderError> {
 }
 
 /// Get the bit depth from a Vapoursynth `VideoInfo` struct.
-fn get_bit_depth(info: VideoInfo) -> Result<usize, DecoderError> {
+fn get_bit_depth(info: VideoInfo) -> Result<BitDepth, DecoderError> {
     let bits_per_sample = {
         match info.format {
             Property::Variable => {
@@ -383,7 +571,7 @@ fn get_bit_depth(info: VideoInfo) -> Result<usize, DecoderError> {
 }
 
 /// Get the resolution from a Vapoursynth `VideoInfo` struct.
-fn get_resolution(info: VideoInfo) -> Result<(usize, usize), DecoderError> {
+fn get_resolution(info: VideoInfo) -> Result<(Width, Height), DecoderError> {
     let resolution = {
         match info.resolution {
             Property::Variable => {
@@ -430,4 +618,20 @@ fn get_chroma_sampling(info: VideoInfo) -> Result<ChromaSampling, DecoderError> 
             }),
         },
     }
+}
+
+/// Get the `VideoDetails` and `TotalFrames` from a Vapoursynth `VideoInfo` struct.
+fn parse_video_details(info: VideoInfo) -> Result<(VideoDetails, TotalFrames), DecoderError> {
+    let total_frames = get_num_frames(info)?;
+    let (width, height) = get_resolution(info)?;
+    Ok((
+        VideoDetails {
+            width,
+            height,
+            bit_depth: get_bit_depth(info)?,
+            chroma_sampling: get_chroma_sampling(info)?,
+            frame_rate: get_frame_rate(info)?,
+        },
+        total_frames,
+    ))
 }

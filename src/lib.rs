@@ -28,7 +28,11 @@ mod helpers {
 #[cfg(feature = "ffmpeg")]
 pub use crate::helpers::ffmpeg::FfmpegDecoder;
 #[cfg(feature = "vapoursynth")]
+pub use crate::helpers::vapoursynth::ModifyNode;
+#[cfg(feature = "vapoursynth")]
 pub use crate::helpers::vapoursynth::VapoursynthDecoder;
+#[cfg(feature = "vapoursynth")]
+use crate::helpers::vapoursynth::{VariableName, VariableValue};
 pub use error::DecoderError;
 pub use num_rational::Rational32;
 pub use v_frame;
@@ -246,9 +250,9 @@ impl Decoder {
     ///   that will be used as the source for decoding. The script must be valid VapourSynth
     ///   Python code that produces a video clip.
     ///
-    /// * `arguments` - Optional script arguments as key-value pairs. These will be passed
+    /// * `variables` - Optional script variables as key-value pairs. These will be passed
     ///   to the VapourSynth environment and can be accessed within the script using
-    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no arguments are needed.
+    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no variables are needed.
     ///
     /// # Returns
     ///
@@ -284,12 +288,12 @@ impl Decoder {
     /// let details = decoder.get_video_details();
     /// println!("Video: {}x{} @ {} fps", details.width, details.height, details.frame_rate);
     ///
-    /// // Script with arguments for dynamic processing
+    /// // Script with variables for dynamic processing
     /// let script_with_args = r#"
     /// import vapoursynth as vs
     /// core = vs.core
     ///
-    /// # Get arguments passed from Rust
+    /// # Get variables passed from Rust
     /// filename = vs.get_output().get("filename", "default.mkv")
     /// resize_width = int(vs.get_output().get("width", "1920"))
     ///
@@ -298,11 +302,11 @@ impl Decoder {
     /// clip.set_output()
     /// "#;
     ///
-    /// let mut arguments = HashMap::new();
-    /// arguments.insert("filename".to_string(), "video.mp4".to_string());
-    /// arguments.insert("width".to_string(), "1280".to_string());
+    /// let mut variables = HashMap::new();
+    /// variables.insert("filename".to_string(), "video.mp4".to_string());
+    /// variables.insert("width".to_string(), "1280".to_string());
     ///
-    /// let mut decoder = Decoder::from_script(script_with_args, Some(arguments))?;
+    /// let mut decoder = Decoder::from_script(script_with_args, Some(variables))?;
     ///
     /// // Read frames from the processed video
     /// while let Ok(frame) = decoder.read_video_frame::<u8>() {
@@ -343,10 +347,12 @@ impl Decoder {
     #[cfg(feature = "vapoursynth")]
     pub fn from_script(
         script: &str,
-        arguments: Option<HashMap<String, String>>,
+        variables: Option<HashMap<VariableName, VariableValue>>,
     ) -> Result<Decoder, DecoderError> {
         let mut dec = VapoursynthDecoder::from_script(script)?;
-        dec.set_arguments(arguments)?;
+        if let Some(variables_map) = variables {
+            dec.set_variables(variables_map)?;
+        }
         let decoder = DecoderImpl::Vapoursynth(dec);
         let video_details = decoder.video_details()?;
         Ok(Decoder {
