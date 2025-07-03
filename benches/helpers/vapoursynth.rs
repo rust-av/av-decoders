@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use av_decoders::DecoderError;
 use vapoursynth::{api::API, core::CoreRef, format::PresetFormat, node::Node, plugin::Plugin};
 
@@ -47,6 +49,68 @@ fn get_plugin(core: CoreRef, plugin_id: PluginId) -> Result<Plugin, DecoderError
         .unwrap();
 
     Ok(plugin)
+}
+
+pub(crate) fn import_lsmash<'core>(
+    core: CoreRef<'core>,
+    input: impl AsRef<Path>,
+    cache: Option<bool>,
+) -> Result<Node<'core>, DecoderError> {
+    let input = input.as_ref();
+    let api = API::get()
+        .ok_or(DecoderError::VapoursynthInternalError {
+            cause: "Failed to get VapourSynth API".to_owned(),
+        })
+        .unwrap();
+    let lsmash = get_plugin(core, PluginId::Lsmash).unwrap();
+
+    let error_message = || {
+        format!(
+            "Failed to import {video_path} with lsmash",
+            video_path = input.display()
+        )
+    };
+
+    let mut arguments = vapoursynth::map::OwnedMap::new(api);
+    arguments
+        .set("source", &input.as_os_str().as_encoded_bytes())
+        .map_err(|_| DecoderError::VapoursynthArgsError {
+            cause: error_message(),
+        })
+        .unwrap();
+    // Enable cache by default.
+    if let Some(cache) = cache {
+        arguments
+            .set_int(
+                "cache",
+                match cache {
+                    true => 1,
+                    false => 0,
+                },
+            )
+            .map_err(|_| DecoderError::VapoursynthArgsError {
+                cause: error_message(),
+            })
+            .unwrap();
+    }
+    // // Allow hardware acceleration, falls back to software decoding.
+    // arguments
+    //     .set_int("prefer_hw", 3)?
+    //     .map_err(|_| DecoderError::VapoursynthArgsError {
+    //         cause: error_message(),
+    //     })
+    //     .unwrap();
+
+    lsmash
+        .invoke("LWLibavSource", &arguments)
+        .map_err(|_| DecoderError::VapoursynthInternalError {
+            cause: error_message(),
+        })
+        .unwrap()
+        .get_node("clip")
+        .map_err(|_| DecoderError::VapoursynthInternalError {
+            cause: error_message(),
+        })
 }
 
 pub(crate) fn resize_node<'core>(
