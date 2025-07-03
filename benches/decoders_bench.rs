@@ -106,6 +106,44 @@ clip.set_output(0)
 }
 
 #[cfg(feature = "vapoursynth")]
+fn vapoursynth_python_downscale_benchmark(c: &mut Criterion) {
+    c.bench_function("vapoursynth python downscale decode", |b| {
+        let script = format!(
+            r#"
+import vapoursynth as vs
+core = vs.core
+clip = core.lsmas.LWLibavSource(source="{}")
+clip = core.resize.Bicubic(clip, 146, 100)
+clip.set_output(0)
+"#,
+            TEST_FILE
+        );
+        // Create the decoder once to build the index file
+        let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
+            VapoursynthDecoder::from_script(&script).unwrap(),
+        )))
+        .unwrap();
+
+        b.iter_batched(
+            || {
+                Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
+                    VapoursynthDecoder::from_script(&script).unwrap(),
+                )))
+                .unwrap()
+            },
+            |mut decoder| {
+                let mut frames = 0;
+                while decoder.read_video_frame::<u8>().is_ok() {
+                    frames += 1;
+                }
+                assert_eq!(frames, EXPECTED_FRAMECOUNT);
+            },
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
+#[cfg(feature = "vapoursynth")]
 fn vapoursynth_downscale_benchmark(c: &mut Criterion) {
     c.bench_function("vapoursynth decode downscale", |b| {
         let script = format!(
@@ -128,7 +166,12 @@ clip.set_output(0)
                 let mut vapoursynth_decoder = VapoursynthDecoder::from_script(&script).unwrap();
                 vapoursynth_decoder
                     .register_node_modifier(Box::new(move |core, node| {
-                        let node = node.expect("No output node defined");
+                        // Node is expected to exist
+                        let node = node.ok_or_else(|| {
+                            av_decoders::DecoderError::VapoursynthInternalError {
+                                cause: "No output node".to_string(),
+                            }
+                        })?;
                         let info = node.info();
                         let resolution = {
                             match info.resolution {
@@ -269,7 +312,7 @@ clip.set_output(0)
                 }
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::NumIterations(20),
         )
     });
 }
@@ -336,6 +379,7 @@ criterion_group!(
     y4m_hbd_benchmark,
     vapoursynth_benchmark,
     vapoursynth_hbd_benchmark,
+    vapoursynth_python_downscale_benchmark,
     vapoursynth_downscale_benchmark,
     vapoursynth_empty_benchmark,
     ffmpeg_benchmark,
