@@ -208,7 +208,7 @@ impl Decoder {
         // so we should prioritize it over ffmpeg.
         #[cfg(feature = "vapoursynth")]
         {
-            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input)?);
+            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,

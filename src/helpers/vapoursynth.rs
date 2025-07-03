@@ -17,16 +17,28 @@ use vapoursynth::{
 
 const OUTPUT_INDEX: i32 = 0;
 
-// TODO: this is boilerplate
-/// A callback function that is used to modify the Vapoursynth node before it is used to decode frames.
+/// The type for the callback function used to modify the Vapoursynth node
+/// before it is used to decode frames. This allows the user to modify
+/// the node to suit their needs, such as adding filters, changing the
+/// output format, etc.
 ///
-/// This allows the user to modify the node to suit their needs, such as adding filters, changing the output format, etc.
+/// The callback is called with the `CoreRef` and the VapourSynth output
+/// node created during initialization.
 ///
-/// The callback is called with the `CoreRef` of the core and the node that is about to be used for decoding.
+/// The callback must return the modified node.
 ///
-/// The callback should return the modified node, or an error if the modification failed.
+/// Arguments
+///
+/// * `core` - A reference to the VapourSynth core.
+/// * `node` - The VapourSynth output node created during initialization.
+///
+/// Returns
+///
+/// Returns `Ok(vapoursynth::vsscript::Node)` on success, containing the modified
+/// node that will be used for decoding. Returns `Err(DecoderError)` on failure.
 pub type ModifyNode = Box<
-    dyn for<'core> Fn(CoreRef<'core>, Node<'core>) -> Result<Node<'core>, DecoderError> + 'static,
+    dyn for<'core> Fn(CoreRef<'core>, Option<Node<'core>>) -> Result<Node<'core>, DecoderError>
+        + 'static,
 >;
 /// The number of frames in the output video node.
 pub type TotalFrames = usize;
@@ -51,6 +63,54 @@ pub struct VapoursynthDecoder {
 }
 
 impl VapoursynthDecoder {
+    /// Creates a new VapourSynth decoder from a new VapourSynth environment.
+    ///
+    /// This function creates a VapourSynth environment with no output. A valid output node
+    /// must be provided with the `register_node_modifier` function before the decodercan be used
+    /// to decode frames.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(VapoursynthDecoder)` on success, containing a configured decoder.
+    ///
+    /// # Errors
+    ///
+    /// This function can return the following error:
+    ///
+    /// * `DecoderError::VapoursynthInternalError` - If there are internal VapourSynth API issues,
+    ///   missing core, no API access, or no output node defined
+    ///
+    /// # Requirements
+    ///
+    /// - VapourSynth must be installed and properly configured on the system
+    #[inline]
+    pub fn new() -> Result<VapoursynthDecoder, DecoderError> {
+        let env = Environment::new().map_err(|e| match e {
+            vapoursynth::vsscript::Error::CStringConversion(_)
+            | vapoursynth::vsscript::Error::FileOpen(_)
+            | vapoursynth::vsscript::Error::FileRead(_)
+            | vapoursynth::vsscript::Error::PathInvalidUnicode => DecoderError::FileReadError {
+                cause: e.to_string(),
+            },
+            vapoursynth::vsscript::Error::VSScript(vsscript_error) => DecoderError::FileReadError {
+                cause: vsscript_error.to_string(),
+            },
+            vapoursynth::vsscript::Error::NoSuchVariable
+            | vapoursynth::vsscript::Error::NoCore
+            | vapoursynth::vsscript::Error::NoOutput
+            | vapoursynth::vsscript::Error::NoAPI => DecoderError::VapoursynthInternalError {
+                cause: e.to_string(),
+            },
+        })?;
+        Ok(Self {
+            env,
+            modify_node: None,
+            frames_read: 0,
+            total_frames: None,
+            video_details: None,
+        })
+    }
+
     /// Creates a new VapourSynth decoder from a VapourSynth script file.
     ///
     /// This function loads and executes a VapourSynth script file (typically with a `.vpy` extension),
@@ -117,7 +177,7 @@ impl VapoursynthDecoder {
     /// clip.set_output()
     /// ```
     #[inline]
-    pub fn new<P: AsRef<Path>>(input: P) -> Result<VapoursynthDecoder, DecoderError> {
+    pub fn from_file<P: AsRef<Path>>(input: P) -> Result<VapoursynthDecoder, DecoderError> {
         let env = Environment::from_file(input, EvalFlags::SetWorkingDir).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
             | vapoursynth::vsscript::Error::FileOpen(_)
@@ -356,10 +416,20 @@ impl VapoursynthDecoder {
         }
 
         let node = {
-            let (output_node, _) = self
-                .env
-                .get_output(OUTPUT_INDEX)
-                .expect("output node exists--validated during initialization");
+            let output_node = match self.env.get_output(OUTPUT_INDEX) {
+                Ok(output) => {
+                    let (output_node, _) = output;
+                    Some(output_node)
+                }
+                Err(vapoursynth::vsscript::Error::NoOutput) => {
+                    if self.modify_node.is_some() {
+                        None
+                    } else {
+                        panic!("output node exists--validated during initialization");
+                    }
+                }
+                Err(_) => panic!("unexpected error when getting output node"),
+            };
             if let Some(modify_node) = self.modify_node.as_ref() {
                 let core =
                     self.env
@@ -373,7 +443,7 @@ impl VapoursynthDecoder {
                     }
                 })?
             } else {
-                output_node
+                output_node.expect("output node exists--validated during initialization")
             }
         };
 
@@ -447,23 +517,30 @@ impl VapoursynthDecoder {
     ///
     /// Returns `vapoursynth::vsscript::Node`.
     pub(crate) fn get_output_node(&self) -> Node {
-        let node = {
-            let (output_node, _) = self
-                .env
-                .get_output(OUTPUT_INDEX)
-                .expect("output node exists--validated during initialization");
-            if let Some(modify_node) = self.modify_node.as_ref() {
-                let core = self
-                    .env
-                    .get_core()
-                    .expect("core exists--validated during initialization");
-                modify_node(core, output_node)
-                    .expect("modified node exists--validated during registration")
-            } else {
-                output_node
+        let output_node = match self.env.get_output(OUTPUT_INDEX) {
+            Ok(output) => {
+                let (output_node, _) = output;
+                Some(output_node)
             }
+            Err(vapoursynth::vsscript::Error::NoOutput) => {
+                if self.modify_node.is_some() {
+                    None
+                } else {
+                    panic!("output node does not exist");
+                }
+            }
+            Err(_) => panic!("unexpected error when getting output node"),
         };
-        node
+        if let Some(modify_node) = self.modify_node.as_ref() {
+            let core = self
+                .env
+                .get_core()
+                .expect("core exists--validated during initialization");
+            modify_node(core, output_node)
+                .expect("modified node exists--validated during registration")
+        } else {
+            output_node.expect("output node exists--validated during initialization")
+        }
     }
 
     /// Register a callback function that modifies the VapourSynth output node
@@ -503,23 +580,19 @@ impl VapoursynthDecoder {
             .map_err(|e| DecoderError::VapoursynthInternalError {
                 cause: e.to_string(),
             })?;
-        let (output_node, _) = self.env.get_output(OUTPUT_INDEX).map_err(|e| match e {
-            vapoursynth::vsscript::Error::CStringConversion(_)
-            | vapoursynth::vsscript::Error::FileOpen(_)
-            | vapoursynth::vsscript::Error::FileRead(_)
-            | vapoursynth::vsscript::Error::PathInvalidUnicode => DecoderError::FileReadError {
-                cause: e.to_string(),
-            },
-            vapoursynth::vsscript::Error::VSScript(vsscript_error) => DecoderError::FileReadError {
-                cause: vsscript_error.to_string(),
-            },
-            vapoursynth::vsscript::Error::NoSuchVariable
-            | vapoursynth::vsscript::Error::NoCore
-            | vapoursynth::vsscript::Error::NoOutput
-            | vapoursynth::vsscript::Error::NoAPI => DecoderError::VapoursynthInternalError {
-                cause: e.to_string(),
-            },
-        })?;
+
+        let output_node = {
+            let res = self.env.get_output(OUTPUT_INDEX);
+            match res {
+                Ok((node, _)) => Some(node),
+                Err(vapoursynth::vsscript::Error::NoOutput) => None,
+                Err(e) => {
+                    return Err(DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    })
+                }
+            }
+        };
         let modified_node = modify_node(core, output_node)?;
 
         // Set the updated video details and total frames
