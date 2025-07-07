@@ -40,7 +40,7 @@ fn y4m_benchmark(c: &mut Criterion) {
                 }
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::PerIteration,
         )
     });
 }
@@ -63,7 +63,7 @@ fn y4m_hbd_benchmark(c: &mut Criterion) {
                 }
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::PerIteration,
         )
     });
 }
@@ -100,7 +100,7 @@ clip.set_output(0)
                 }
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::PerIteration,
         )
     });
 }
@@ -372,7 +372,7 @@ clip.set_output(0)
                 }
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
-            criterion::BatchSize::NumIterations(20),
+            criterion::BatchSize::PerIteration,
         )
     });
 }
@@ -400,7 +400,7 @@ fn ffmpeg_benchmark(c: &mut Criterion) {
                 }
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::PerIteration,
         )
     });
 }
@@ -422,7 +422,7 @@ fn ffmpeg_hbd_benchmark(c: &mut Criterion) {
                 }
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::PerIteration,
         )
     });
 }

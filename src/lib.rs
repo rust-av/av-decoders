@@ -102,8 +102,8 @@ impl Default for VideoDetails {
 ///
 /// The decoder automatically selects backends in this order of preference:
 /// 1. **Y4M parser** - Used for Y4M files (fastest, lowest overhead)
-/// 2. **VapourSynth** - Used when available (best metadata accuracy and seeking)
-/// 3. **FFmpeg** - Used as fallback for general video files
+/// 2. **FFmpeg** - Used when available for faster decoding of a variety of formats
+/// 3. **VapourSynth** - Used as fallback when VapourSynth not available
 ///
 /// ## Examples
 ///
@@ -134,8 +134,8 @@ impl Decoder {
     /// Creates a new decoder from a file path.
     ///
     /// This method automatically detects the input format and selects the most appropriate
-    /// decoder backend. It will prioritize Y4M files for performance, then VapourSynth
-    /// for accuracy, and finally FFmpeg for broad format support.
+    /// decoder backend. It will prioritize Y4M files for performance, then FFmpeg for speed,
+    /// and finally Vapoursynth.
     ///
     /// # Arguments
     ///
@@ -207,11 +207,11 @@ impl Decoder {
             }
         }
 
-        // Vapoursynth tends to give the most video metadata and have the best frame accuracy when seeking,
-        // so we should prioritize it over ffmpeg.
-        #[cfg(feature = "vapoursynth")]
+        // Ffmpeg is considerably faster at decoding, so we should prefer it over Vapoursynth
+        // for general use cases.
+        #[cfg(feature = "ffmpeg")]
         {
-            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input)?);
+            let decoder = DecoderImpl::Ffmpeg(FfmpegDecoder::new(input)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
@@ -219,9 +219,9 @@ impl Decoder {
             });
         }
 
-        #[cfg(feature = "ffmpeg")]
+        #[cfg(feature = "vapoursynth")]
         {
-            let decoder = DecoderImpl::Ffmpeg(FfmpegDecoder::new(input)?);
+            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,

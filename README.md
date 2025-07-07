@@ -128,8 +128,7 @@ pub struct VideoDetails {
 The library automatically selects the best decoder based on:
 
 1. **File Extension**: Y4M files (`.y4m`, `.yuv`) use the Y4M parser
-2. **Feature Availability**: VapourSynth preferred over FFmpeg when both available
-3. **Fallback**: FFmpeg used for general video files
+2. **Feature Availability**: FFmpeg preferred over VapourSynth when both available
 
 ## Error Handling
 
