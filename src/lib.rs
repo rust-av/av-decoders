@@ -67,6 +67,8 @@ pub struct VideoDetails {
     /// - `Rational32::new(24000, 1001)` for 23.976 fps (24000/1001)
     /// - `Rational32::new(25, 1)` for 25 fps
     pub frame_rate: Rational32,
+    /// The total number of frames in the video, if known.
+    pub total_frames: Option<usize>,
 }
 
 #[cfg(test)]
@@ -79,6 +81,7 @@ impl Default for VideoDetails {
             bit_depth: 8,
             chroma_sampling: ChromaSampling::Cs420,
             frame_rate: Rational32::new(30, 1),
+            total_frames: None,
         }
     }
 }
@@ -609,6 +612,84 @@ impl Decoder {
         self.decoder.read_video_frame(&self.video_details)
     }
 
+    /// Reads and decodes the specified video frame from the input.
+    ///
+    /// This method decodes the specified frame and returns it as a `Frame<T>`
+    /// where `T` is the pixel type. The pixel type must be compatible with the video's
+    /// bit depth and the decoder backend being used.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The pixel type to use for the decoded frame. Must implement the `Pixel` trait.
+    ///   Types include:
+    ///   - `u8` for 8-bit video
+    ///   - `u16` for 10-bit to 16-bit video
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok(Frame<T>)` - The decoded video frame
+    /// - `Err(DecoderError)` - An error if the frame cannot be read or decoded
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - End of file/stream is reached (`DecoderError::EndOfFile`)
+    /// - The frame data is corrupted or invalid (`DecoderError::GenericDecodeError`)
+    /// - There's an I/O error reading the input (`DecoderError::FileReadError`)
+    /// - The pixel type is incompatible with the video format
+    /// - The decoder does not support seeking (`DecoderError::UnsupportedDecoder`)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::Decoder;
+    ///
+    /// let script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// clip = core.ffms2.Source('input.mp4')
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let mut decoder = Decoder::from_script().unwrap();
+    /// let details = decoder.get_video_details();
+    ///
+    /// // Seek the 42nd video frame, dynamically detecting the pixel type
+    /// if details.bit_depth > 8 {
+    ///     while let Ok(frame) = decoder.seek_video_frame::<u16>(42) {
+    ///         println!("Frame size: {}x{}",
+    ///             frame.planes[0].cfg.width,
+    ///             frame.planes[0].cfg.height
+    ///         );
+    ///         // Process frame data...
+    ///     }
+    /// } else {
+    ///     while let Ok(frame) = decoder.seek_video_frame::<u8>(42) {
+    ///         println!("Frame size: {}x{}",
+    ///             frame.planes[0].cfg.width,
+    ///             frame.planes[0].cfg.height
+    ///         );
+    ///         // Process frame data...
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// ## Performance Notes
+    ///
+    /// - Frames are decoded sequentially; seeking may not be supported by all backends
+    /// - Each frame contains uncompressed pixel values, which results in heavy memory usage;
+    ///   avoid keeping frames in memory for longer than needed
+    #[inline]
+    pub fn seek_video_frame<T: Pixel>(
+        &mut self,
+        frame_index: usize,
+    ) -> Result<Frame<T>, DecoderError> {
+        self.decoder
+            .seek_video_frame(&self.video_details, frame_index)
+    }
+
     /// Returns a mutable reference to the VapourSynth environment.
     ///
     /// This method provides direct access to the VapourSynth environment when using
@@ -811,6 +892,23 @@ impl DecoderImpl {
             Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg),
             #[cfg(feature = "ffmpeg")]
             Self::Ffmpeg(dec) => dec.read_video_frame::<T>(),
+        }
+    }
+
+    pub(crate) fn seek_video_frame<T: Pixel>(
+        &mut self,
+        cfg: &VideoDetails,
+        frame_index: usize,
+    ) -> Result<Frame<T>, DecoderError> {
+        match self {
+            Self::Y4m(_) => {
+                // Seeking to a specific frame in Y4M is not supported
+                Err(DecoderError::UnsupportedDecoder)
+            }
+            #[cfg(feature = "vapoursynth")]
+            Self::Vapoursynth(dec) => dec.seek_video_frame::<T>(cfg, frame_index),
+            #[cfg(feature = "ffmpeg")]
+            Self::Ffmpeg(_) => Err(DecoderError::UnsupportedDecoder),
         }
     }
 }

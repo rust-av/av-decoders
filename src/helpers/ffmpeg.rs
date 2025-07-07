@@ -122,6 +122,7 @@ impl FfmpegDecoder {
             }
         })?;
 
+        let total_frames = input.frames();
         let frame_rate = input.rate();
         Ok(Self {
             video_details: VideoDetails {
@@ -166,6 +167,7 @@ impl FfmpegDecoder {
                     }
                 },
                 frame_rate: Rational32::new(frame_rate.numerator(), frame_rate.denominator()),
+                total_frames: total_frames.try_into().ok(),
             },
             decoder,
             input_ctx,

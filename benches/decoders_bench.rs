@@ -105,6 +105,66 @@ clip.set_output(0)
     });
 }
 
+fn vapoursynth_seek_benchmark(c: &mut Criterion) {
+    c.bench_function("vapoursynth seek decode", |b| {
+        let script = format!(
+            r#"
+import vapoursynth as vs
+core = vs.core
+clip = core.lsmas.LWLibavSource(source="{}")
+clip.set_output(0)
+"#,
+            TEST_FILE
+        );
+        // Create the decoder once to build the index file
+        let initial_decoder = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(
+            black_box(VapoursynthDecoder::from_script(&script).unwrap()),
+        ))
+        .unwrap();
+        let initial_details = initial_decoder.get_video_details();
+        let total_frames = initial_details.total_frames.unwrap();
+        const SIMULTANEOUS_DECODERS: usize = 2;
+
+        b.iter_batched(
+            || {
+                let mut decoders = Vec::with_capacity(SIMULTANEOUS_DECODERS);
+                for i in 0..SIMULTANEOUS_DECODERS {
+                    let decoder =
+                        Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(
+                            black_box(VapoursynthDecoder::from_script(&script).unwrap()),
+                        ))
+                        .unwrap();
+                    let frames_per_decoder = total_frames / SIMULTANEOUS_DECODERS;
+                    let start_frame = i * frames_per_decoder;
+                    let end_frame = if i == SIMULTANEOUS_DECODERS - 1 {
+                        total_frames
+                    } else {
+                        start_frame + frames_per_decoder
+                    };
+                    decoders.push((decoder, start_frame, end_frame));
+                }
+
+                decoders
+            },
+            |mut decoder| {
+                let mut total_read_frames = 0;
+                for frame_index_offset in 0..(total_frames / SIMULTANEOUS_DECODERS) {
+                    for (decoder, start_frame, end_frame) in &mut decoder {
+                        if decoder
+                            .seek_video_frame::<u8>(*start_frame + frame_index_offset)
+                            .is_ok()
+                        {
+                            total_read_frames += 1;
+                        }
+                    }
+                }
+                assert_eq!(total_read_frames, EXPECTED_FRAMECOUNT);
+            },
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
 #[cfg(feature = "vapoursynth")]
 fn vapoursynth_python_downscale_benchmark(c: &mut Criterion) {
     c.bench_function("vapoursynth python downscale decode", |b| {
@@ -378,6 +438,7 @@ criterion_group!(
     y4m_benchmark,
     y4m_hbd_benchmark,
     vapoursynth_benchmark,
+    vapoursynth_seek_benchmark,
     vapoursynth_hbd_benchmark,
     vapoursynth_python_downscale_benchmark,
     vapoursynth_downscale_benchmark,

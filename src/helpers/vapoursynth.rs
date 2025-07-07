@@ -58,7 +58,6 @@ pub struct VapoursynthDecoder {
     env: Environment,
     modify_node: Option<ModifyNode>,
     frames_read: usize,
-    total_frames: Option<TotalFrames>,
     video_details: Option<VideoDetails>,
 }
 
@@ -106,7 +105,6 @@ impl VapoursynthDecoder {
             env,
             modify_node: None,
             frames_read: 0,
-            total_frames: None,
             video_details: None,
         })
     }
@@ -199,7 +197,6 @@ impl VapoursynthDecoder {
             env,
             modify_node: None,
             frames_read: 0,
-            total_frames: None,
             video_details: None,
         })
     }
@@ -306,7 +303,6 @@ impl VapoursynthDecoder {
             env,
             modify_node: None,
             frames_read: 0,
-            total_frames: None,
             video_details: None,
         })
     }
@@ -391,7 +387,7 @@ impl VapoursynthDecoder {
             Some(details) => Ok(details),
             None => {
                 let node = self.get_output_node();
-                let (details, _) = parse_video_details(node.info())?;
+                let details = parse_video_details(node.info())?;
                 Ok(details)
             }
         }
@@ -408,10 +404,11 @@ impl VapoursynthDecoder {
         const FRAME_MARGIN: usize = 16 + SUBPEL_FILTER_SIZE;
         const LUMA_PADDING: usize = SB_SIZE + FRAME_MARGIN;
 
-        if self
-            .total_frames
-            .is_some_and(|total_frames| self.frames_read >= total_frames)
-        {
+        if self.video_details.is_some_and(|details| {
+            details
+                .total_frames
+                .is_some_and(|total_frames| self.frames_read >= total_frames)
+        }) {
             return Err(DecoderError::EndOfFile);
         }
 
@@ -448,16 +445,111 @@ impl VapoursynthDecoder {
         };
 
         // Lazy load the total frame count
-        if self.total_frames.is_none() {
-            let (video_details, total_frames) = parse_video_details(node.info())?;
+        if self.video_details.is_none() {
+            let video_details = parse_video_details(node.info())?;
             self.video_details = Some(video_details);
-            self.total_frames = Some(total_frames);
         }
 
         let vs_frame = node
             .get_frame(self.frames_read)
             .map_err(|_| DecoderError::EndOfFile)?;
         self.frames_read += 1;
+
+        let bytes = size_of::<T>();
+        let mut f: Frame<T> =
+            Frame::new_with_padding(cfg.width, cfg.height, cfg.chroma_sampling, LUMA_PADDING);
+
+        // SAFETY: We are using the stride to compute the length of the data slice
+        unsafe {
+            f.planes[0].copy_from_raw_u8(
+                slice::from_raw_parts(
+                    vs_frame.data_ptr(0),
+                    vs_frame.stride(0) * vs_frame.height(0),
+                ),
+                vs_frame.stride(0),
+                bytes,
+            );
+            f.planes[1].copy_from_raw_u8(
+                slice::from_raw_parts(
+                    vs_frame.data_ptr(1),
+                    vs_frame.stride(1) * vs_frame.height(1),
+                ),
+                vs_frame.stride(1),
+                bytes,
+            );
+            f.planes[2].copy_from_raw_u8(
+                slice::from_raw_parts(
+                    vs_frame.data_ptr(2),
+                    vs_frame.stride(2) * vs_frame.height(2),
+                ),
+                vs_frame.stride(2),
+                bytes,
+            );
+        }
+        Ok(f)
+    }
+
+    #[allow(clippy::transmute_ptr_to_ptr)]
+    pub(crate) fn seek_video_frame<T: Pixel>(
+        &mut self,
+        cfg: &VideoDetails,
+        frame_index: usize,
+    ) -> Result<Frame<T>, DecoderError> {
+        const SB_SIZE_LOG2: usize = 6;
+        const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
+        const SUBPEL_FILTER_SIZE: usize = 8;
+        const FRAME_MARGIN: usize = 16 + SUBPEL_FILTER_SIZE;
+        const LUMA_PADDING: usize = SB_SIZE + FRAME_MARGIN;
+
+        if self.video_details.is_some_and(|details| {
+            details
+                .total_frames
+                .is_some_and(|total_frames| frame_index > total_frames)
+        }) {
+            return Err(DecoderError::EndOfFile);
+        }
+
+        let node = {
+            let output_node = match self.env.get_output(OUTPUT_INDEX) {
+                Ok(output) => {
+                    let (output_node, _) = output;
+                    Some(output_node)
+                }
+                Err(vapoursynth::vsscript::Error::NoOutput) => {
+                    if self.modify_node.is_some() {
+                        None
+                    } else {
+                        panic!("output node exists--validated during initialization");
+                    }
+                }
+                Err(_) => panic!("unexpected error when getting output node"),
+            };
+            if let Some(modify_node) = self.modify_node.as_ref() {
+                let core =
+                    self.env
+                        .get_core()
+                        .map_err(|e| DecoderError::VapoursynthInternalError {
+                            cause: e.to_string(),
+                        })?;
+                modify_node(core, output_node).map_err(|e| {
+                    DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    }
+                })?
+            } else {
+                output_node.expect("output node exists--validated during initialization")
+            }
+        };
+
+        // Lazy load the total frame count
+        if self.video_details.is_none() {
+            let video_details = parse_video_details(node.info())?;
+            self.video_details = Some(video_details);
+        }
+
+        let vs_frame = node
+            .get_frame(frame_index)
+            .map_err(|_| DecoderError::EndOfFile)?;
 
         let bytes = size_of::<T>();
         let mut f: Frame<T> =
@@ -596,9 +688,8 @@ impl VapoursynthDecoder {
         let modified_node = modify_node(core, output_node)?;
 
         // Set the updated video details and total frames
-        let (video_details, total_frames) = parse_video_details(modified_node.info())?;
+        let video_details = parse_video_details(modified_node.info())?;
         self.video_details = Some(video_details);
-        self.total_frames = Some(total_frames);
         // Register the node modifier to be used during read_video_frame
         self.modify_node = Some(modify_node);
 
@@ -694,17 +785,15 @@ fn get_chroma_sampling(info: VideoInfo) -> Result<ChromaSampling, DecoderError> 
 }
 
 /// Get the `VideoDetails` and `TotalFrames` from a Vapoursynth `VideoInfo` struct.
-fn parse_video_details(info: VideoInfo) -> Result<(VideoDetails, TotalFrames), DecoderError> {
+fn parse_video_details(info: VideoInfo) -> Result<VideoDetails, DecoderError> {
     let total_frames = get_num_frames(info)?;
     let (width, height) = get_resolution(info)?;
-    Ok((
-        VideoDetails {
-            width,
-            height,
-            bit_depth: get_bit_depth(info)?,
-            chroma_sampling: get_chroma_sampling(info)?,
-            frame_rate: get_frame_rate(info)?,
-        },
-        total_frames,
-    ))
+    Ok(VideoDetails {
+        width,
+        height,
+        bit_depth: get_bit_depth(info)?,
+        chroma_sampling: get_chroma_sampling(info)?,
+        frame_rate: get_frame_rate(info)?,
+        total_frames: Some(total_frames),
+    })
 }
