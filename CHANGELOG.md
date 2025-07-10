@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 0.2.1
+
+- Fix the `from_file` method so that the Vapoursynth decoder is prioritized for `.vpy` inputs,
+  and will be used as a fallback and work properly for video inputs. Ffmpeg will be prioritzed
+  for video inputs if both features are enabled.
+
 ## Version 0.2.0
 
 - [Breaking] Move the `from_*` methods into `Decoder`. I wanted to do this from the
