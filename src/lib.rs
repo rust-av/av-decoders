@@ -240,7 +240,7 @@ clip.set_output()
                     .to_string_lossy()
                     .replace('"', "\\\"")
             );
-            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(&script)?);
+            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
