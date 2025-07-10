@@ -205,6 +205,17 @@ impl Decoder {
                     video_details,
                 });
             }
+
+            #[cfg(feature = "vapoursynth")]
+            if ext == "vpy" {
+                // Decode vapoursynth script file input
+                let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input)?);
+                let video_details = decoder.video_details()?;
+                return Ok(Decoder {
+                    decoder,
+                    video_details,
+                });
+            }
         }
 
         // Ffmpeg is considerably faster at decoding, so we should prefer it over Vapoursynth
@@ -221,7 +232,22 @@ impl Decoder {
 
         #[cfg(feature = "vapoursynth")]
         {
-            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input)?);
+            // Build a vapoursynth script and use that
+            let script = format!(
+                r#"
+import vapoursynth as vs
+core = vs.core
+clip = core.ffms2.Source("{}")
+clip.set_output()
+"#,
+                std::path::absolute(input)
+                    .map_err(|e| DecoderError::FileReadError {
+                        cause: e.to_string()
+                    })?
+                    .to_string_lossy()
+                    .replace('"', "\\\"")
+            );
+            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
