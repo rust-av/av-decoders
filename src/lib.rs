@@ -211,11 +211,12 @@ impl Decoder {
             #[cfg(feature = "vapoursynth")]
             if ext == "vpy" {
                 // Decode vapoursynth script file input
-                let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input)?);
+                let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input)?);
                 let video_details = decoder.video_details()?;
                 return Ok(Decoder {
                     decoder,
                     video_details,
+                    frames_read: 0,
                 });
             }
         }
