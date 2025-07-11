@@ -725,14 +725,15 @@ clip.set_output()
     /// - Each frame contains uncompressed pixel values, which results in heavy memory usage;
     ///   avoid keeping frames in memory for longer than needed
     #[inline]
+    #[cfg(feature = "vapoursynth")]
     pub fn get_video_frame<T: Pixel>(
         &mut self,
-        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] frame_index: usize,
+        frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         self.decoder.get_video_frame(
-            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))]
+            #[cfg(feature = "vapoursynth")]
             &self.video_details,
-            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))]
+            #[cfg(feature = "vapoursynth")]
             frame_index,
         )
     }
@@ -943,10 +944,11 @@ impl DecoderImpl {
         }
     }
 
+    #[cfg(feature = "vapoursynth")]
     pub(crate) fn get_video_frame<T: Pixel>(
         &mut self,
-        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] cfg: &VideoDetails,
-        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] frame_index: usize,
+        cfg: &VideoDetails,
+        frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
             Self::Y4m(_) => {
