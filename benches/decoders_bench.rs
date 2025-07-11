@@ -105,6 +105,7 @@ clip.set_output(0)
     });
 }
 
+#[cfg(feature = "vapoursynth")]
 fn vapoursynth_seek_benchmark(c: &mut Criterion) {
     c.bench_function("vapoursynth seek decode", |b| {
         let script = format!(
@@ -165,6 +166,9 @@ clip.set_output(0)
     });
 }
 
+#[cfg(not(feature = "vapoursynth"))]
+fn vapoursynth_seek_benchmark(_c: &mut Criterion) {}
+
 #[cfg(feature = "vapoursynth")]
 fn vapoursynth_python_downscale_benchmark(c: &mut Criterion) {
     c.bench_function("vapoursynth python downscale decode", |b| {
@@ -202,6 +206,9 @@ clip.set_output(0)
         )
     });
 }
+
+#[cfg(not(feature = "vapoursynth"))]
+fn vapoursynth_python_downscale_benchmark(_c: &mut Criterion) {}
 
 #[cfg(feature = "vapoursynth")]
 fn vapoursynth_downscale_benchmark(c: &mut Criterion) {
@@ -283,6 +290,9 @@ clip.set_output(0)
     });
 }
 
+#[cfg(not(feature = "vapoursynth"))]
+fn vapoursynth_downscale_benchmark(_c: &mut Criterion) {}
+
 #[cfg(feature = "vapoursynth")]
 fn vapoursynth_empty_benchmark(c: &mut Criterion) {
     c.bench_function("vapoursynth decode empty", |b| {
@@ -339,6 +349,9 @@ fn vapoursynth_empty_benchmark(c: &mut Criterion) {
         )
     });
 }
+
+#[cfg(not(feature = "vapoursynth"))]
+fn vapoursynth_empty_benchmark(_c: &mut Criterion) {}
 
 #[cfg(feature = "vapoursynth")]
 fn vapoursynth_hbd_benchmark(c: &mut Criterion) {

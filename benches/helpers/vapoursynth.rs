@@ -1,3 +1,5 @@
+#![cfg(feature = "vapoursynth")]
+
 use std::path::Path;
 
 use av_decoders::DecoderError;
