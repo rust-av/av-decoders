@@ -643,9 +643,11 @@ clip.set_output()
     ///   avoid keeping frames in memory for longer than needed
     #[inline]
     pub fn read_video_frame<T: Pixel>(&mut self) -> Result<Frame<T>, DecoderError> {
-        let result = self
-            .decoder
-            .read_video_frame(&self.video_details, self.frames_read);
+        let result = self.decoder.read_video_frame(
+            &self.video_details,
+            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))]
+            self.frames_read,
+        );
         if result.is_ok() {
             self.frames_read += 1;
         }
@@ -724,10 +726,14 @@ clip.set_output()
     #[inline]
     pub fn get_video_frame<T: Pixel>(
         &mut self,
-        frame_index: usize,
+        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
-        self.decoder
-            .get_video_frame(&self.video_details, frame_index)
+        self.decoder.get_video_frame(
+            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))]
+            &self.video_details,
+            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))]
+            frame_index,
+        )
     }
 
     /// Returns a mutable reference to the VapourSynth environment.
@@ -925,7 +931,7 @@ impl DecoderImpl {
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
-        frame_index: usize,
+        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
             Self::Y4m(dec) => helpers::y4m::read_video_frame::<Box<dyn Read>, T>(dec, cfg),
@@ -938,8 +944,8 @@ impl DecoderImpl {
 
     pub(crate) fn get_video_frame<T: Pixel>(
         &mut self,
-        cfg: &VideoDetails,
-        frame_index: usize,
+        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] cfg: &VideoDetails,
+        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
             Self::Y4m(_) => {
