@@ -128,6 +128,7 @@ impl Default for VideoDetails {
 pub struct Decoder {
     decoder: DecoderImpl,
     video_details: VideoDetails,
+    frames_read: usize,
 }
 
 impl Decoder {
@@ -203,6 +204,7 @@ impl Decoder {
                 return Ok(Decoder {
                     decoder,
                     video_details,
+                    frames_read: 0,
                 });
             }
         }
@@ -216,6 +218,7 @@ impl Decoder {
             return Ok(Decoder {
                 decoder,
                 video_details,
+                frames_read: 0,
             });
         }
 
@@ -226,6 +229,7 @@ impl Decoder {
             return Ok(Decoder {
                 decoder,
                 video_details,
+                frames_read: 0,
             });
         }
 
@@ -361,6 +365,7 @@ impl Decoder {
         Ok(Decoder {
             decoder,
             video_details,
+            frames_read: 0,
         })
     }
 
@@ -426,10 +431,11 @@ impl Decoder {
                 },
             },
         )?);
-        let video_details = decoder.video_details()?;
+        let video_details: VideoDetails = decoder.video_details()?;
         Ok(Decoder {
             decoder,
             video_details,
+            frames_read: 0,
         })
     }
 
@@ -504,6 +510,7 @@ impl Decoder {
         Ok(Decoder {
             decoder: decoder_impl,
             video_details,
+            frames_read: 0,
         })
     }
 
@@ -609,7 +616,13 @@ impl Decoder {
     ///   avoid keeping frames in memory for longer than needed
     #[inline]
     pub fn read_video_frame<T: Pixel>(&mut self) -> Result<Frame<T>, DecoderError> {
-        self.decoder.read_video_frame(&self.video_details)
+        let result = self
+            .decoder
+            .read_video_frame(&self.video_details, self.frames_read);
+        if result.is_ok() {
+            self.frames_read += 1;
+        }
+        result
     }
 
     /// Reads and decodes the specified video frame from the input.
@@ -885,13 +898,14 @@ impl DecoderImpl {
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
+        frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
             Self::Y4m(dec) => helpers::y4m::read_video_frame::<Box<dyn Read>, T>(dec, cfg),
             #[cfg(feature = "vapoursynth")]
-            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg),
+            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
             #[cfg(feature = "ffmpeg")]
-            Self::Ffmpeg(dec) => dec.read_video_frame::<T>(),
+            Self::Ffmpeg(dec) => dec.read_video_frame::<T>(frame_index),
         }
     }
 
@@ -906,7 +920,7 @@ impl DecoderImpl {
                 Err(DecoderError::UnsupportedDecoder)
             }
             #[cfg(feature = "vapoursynth")]
-            Self::Vapoursynth(dec) => dec.seek_video_frame::<T>(cfg, frame_index),
+            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
             #[cfg(feature = "ffmpeg")]
             Self::Ffmpeg(_) => Err(DecoderError::UnsupportedDecoder),
         }

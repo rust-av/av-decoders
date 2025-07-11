@@ -26,7 +26,6 @@ pub struct FfmpegDecoder {
     input_ctx: context::Input,
     decoder: decoder::Video,
     pub(crate) video_details: VideoDetails,
-    frameno: usize,
     stream_index: usize,
     end_of_stream: bool,
     eof_sent: bool,
@@ -171,7 +170,6 @@ impl FfmpegDecoder {
             },
             decoder,
             input_ctx,
-            frameno: 0,
             stream_index,
             end_of_stream: false,
             eof_sent: false,
@@ -205,7 +203,10 @@ impl FfmpegDecoder {
         f
     }
 
-    pub(crate) fn read_video_frame<T: Pixel>(&mut self) -> Result<Frame<T>, DecoderError> {
+    pub(crate) fn read_video_frame<T: Pixel>(
+        &mut self,
+        frame_index: usize,
+    ) -> Result<Frame<T>, DecoderError> {
         // For some reason there's a crap ton of work needed to get ffmpeg to do
         // something simple, because each codec has it's own stupid way of doing
         // things and they don't all decode the same way.
@@ -242,8 +243,8 @@ impl FfmpegDecoder {
                     self.video_details.width as u32,
                     self.video_details.height as u32,
                 );
-                packet.set_pts(Some(self.frameno as i64));
-                packet.set_dts(Some(self.frameno as i64));
+                packet.set_pts(Some(frame_index as i64));
+                packet.set_dts(Some(frame_index as i64));
 
                 if !self.end_of_stream {
                     let _ = self.decoder.send_packet(&packet);
@@ -251,7 +252,6 @@ impl FfmpegDecoder {
 
                 if self.decoder.receive_frame(&mut decoded).is_ok() {
                     let f = self.decode_frame(&decoded);
-                    self.frameno += 1;
                     return Ok(f);
                 } else if self.end_of_stream {
                     return Err(DecoderError::EndOfFile);
