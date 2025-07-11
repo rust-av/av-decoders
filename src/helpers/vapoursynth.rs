@@ -536,7 +536,7 @@ impl VapoursynthDecoder {
     }
 
     /// Register a callback function that modifies the VapourSynth output node
-    /// created during initializaation.
+    /// created during initialization.
     ///
     /// # Arguments
     ///
