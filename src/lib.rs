@@ -696,9 +696,9 @@ clip.set_output()
     /// let mut decoder = Decoder::from_script().unwrap();
     /// let details = decoder.get_video_details();
     ///
-    /// // Seek the 42nd video frame, dynamically detecting the pixel type
+    /// // Get the 42nd video frame, dynamically detecting the pixel type
     /// if details.bit_depth > 8 {
-    ///     while let Ok(frame) = decoder.seek_video_frame::<u16>(42) {
+    ///     while let Ok(frame) = decoder.get_video_frame::<u16>(42) {
     ///         println!("Frame size: {}x{}",
     ///             frame.planes[0].cfg.width,
     ///             frame.planes[0].cfg.height
@@ -706,7 +706,7 @@ clip.set_output()
     ///         // Process frame data...
     ///     }
     /// } else {
-    ///     while let Ok(frame) = decoder.seek_video_frame::<u8>(42) {
+    ///     while let Ok(frame) = decoder.get_video_frame::<u8>(42) {
     ///         println!("Frame size: {}x{}",
     ///             frame.planes[0].cfg.width,
     ///             frame.planes[0].cfg.height
@@ -718,16 +718,16 @@ clip.set_output()
     ///
     /// ## Performance Notes
     ///
-    /// - Frames are decoded sequentially; seeking may not be supported by all backends
+    /// - Getting a specific video frame may not be supported by all backends
     /// - Each frame contains uncompressed pixel values, which results in heavy memory usage;
     ///   avoid keeping frames in memory for longer than needed
     #[inline]
-    pub fn seek_video_frame<T: Pixel>(
+    pub fn get_video_frame<T: Pixel>(
         &mut self,
         frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         self.decoder
-            .seek_video_frame(&self.video_details, frame_index)
+            .get_video_frame(&self.video_details, frame_index)
     }
 
     /// Returns a mutable reference to the VapourSynth environment.
@@ -936,7 +936,7 @@ impl DecoderImpl {
         }
     }
 
-    pub(crate) fn seek_video_frame<T: Pixel>(
+    pub(crate) fn get_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
         frame_index: usize,
