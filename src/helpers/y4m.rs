@@ -23,6 +23,7 @@ pub fn get_video_details<R: Read>(dec: &y4m::Decoder<R>) -> VideoDetails {
         bit_depth,
         chroma_sampling,
         frame_rate,
+        total_frames: None,
     }
 }
 

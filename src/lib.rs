@@ -28,7 +28,11 @@ mod helpers {
 #[cfg(feature = "ffmpeg")]
 pub use crate::helpers::ffmpeg::FfmpegDecoder;
 #[cfg(feature = "vapoursynth")]
+pub use crate::helpers::vapoursynth::ModifyNode;
+#[cfg(feature = "vapoursynth")]
 pub use crate::helpers::vapoursynth::VapoursynthDecoder;
+#[cfg(feature = "vapoursynth")]
+use crate::helpers::vapoursynth::{VariableName, VariableValue};
 pub use error::DecoderError;
 pub use num_rational::Rational32;
 pub use v_frame;
@@ -63,6 +67,8 @@ pub struct VideoDetails {
     /// - `Rational32::new(24000, 1001)` for 23.976 fps (24000/1001)
     /// - `Rational32::new(25, 1)` for 25 fps
     pub frame_rate: Rational32,
+    /// The total number of frames in the video, if known.
+    pub total_frames: Option<usize>,
 }
 
 #[cfg(test)]
@@ -75,6 +81,7 @@ impl Default for VideoDetails {
             bit_depth: 8,
             chroma_sampling: ChromaSampling::Cs420,
             frame_rate: Rational32::new(30, 1),
+            total_frames: None,
         }
     }
 }
@@ -121,6 +128,7 @@ impl Default for VideoDetails {
 pub struct Decoder {
     decoder: DecoderImpl,
     video_details: VideoDetails,
+    frames_read: usize,
 }
 
 impl Decoder {
@@ -196,17 +204,19 @@ impl Decoder {
                 return Ok(Decoder {
                     decoder,
                     video_details,
+                    frames_read: 0,
                 });
             }
 
             #[cfg(feature = "vapoursynth")]
             if ext == "vpy" {
                 // Decode vapoursynth script file input
-                let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::new(input)?);
+                let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input)?);
                 let video_details = decoder.video_details()?;
                 return Ok(Decoder {
                     decoder,
                     video_details,
+                    frames_read: 0,
                 });
             }
         }
@@ -220,6 +230,7 @@ impl Decoder {
             return Ok(Decoder {
                 decoder,
                 video_details,
+                frames_read: 0,
             });
         }
 
@@ -245,6 +256,7 @@ clip.set_output()
             return Ok(Decoder {
                 decoder,
                 video_details,
+                frames_read: 0,
             });
         }
 
@@ -272,9 +284,9 @@ clip.set_output()
     ///   that will be used as the source for decoding. The script must be valid VapourSynth
     ///   Python code that produces a video clip.
     ///
-    /// * `arguments` - Optional script arguments as key-value pairs. These will be passed
+    /// * `variables` - Optional script variables as key-value pairs. These will be passed
     ///   to the VapourSynth environment and can be accessed within the script using
-    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no arguments are needed.
+    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no variables are needed.
     ///
     /// # Returns
     ///
@@ -310,12 +322,12 @@ clip.set_output()
     /// let details = decoder.get_video_details();
     /// println!("Video: {}x{} @ {} fps", details.width, details.height, details.frame_rate);
     ///
-    /// // Script with arguments for dynamic processing
+    /// // Script with variables for dynamic processing
     /// let script_with_args = r#"
     /// import vapoursynth as vs
     /// core = vs.core
     ///
-    /// # Get arguments passed from Rust
+    /// # Get variables passed from Rust
     /// filename = vs.get_output().get("filename", "default.mkv")
     /// resize_width = int(vs.get_output().get("width", "1920"))
     ///
@@ -324,11 +336,11 @@ clip.set_output()
     /// clip.set_output()
     /// "#;
     ///
-    /// let mut arguments = HashMap::new();
-    /// arguments.insert("filename".to_string(), "video.mp4".to_string());
-    /// arguments.insert("width".to_string(), "1280".to_string());
+    /// let mut variables = HashMap::new();
+    /// variables.insert("filename".to_string(), "video.mp4".to_string());
+    /// variables.insert("width".to_string(), "1280".to_string());
     ///
-    /// let mut decoder = Decoder::from_script(script_with_args, Some(arguments))?;
+    /// let mut decoder = Decoder::from_script(script_with_args, Some(variables))?;
     ///
     /// // Read frames from the processed video
     /// while let Ok(frame) = decoder.read_video_frame::<u8>() {
@@ -369,15 +381,18 @@ clip.set_output()
     #[cfg(feature = "vapoursynth")]
     pub fn from_script(
         script: &str,
-        arguments: Option<HashMap<String, String>>,
+        variables: Option<HashMap<VariableName, VariableValue>>,
     ) -> Result<Decoder, DecoderError> {
         let mut dec = VapoursynthDecoder::from_script(script)?;
-        dec.set_arguments(arguments)?;
+        if let Some(variables_map) = variables {
+            dec.set_variables(variables_map)?;
+        }
         let decoder = DecoderImpl::Vapoursynth(dec);
         let video_details = decoder.video_details()?;
         Ok(Decoder {
             decoder,
             video_details,
+            frames_read: 0,
         })
     }
 
@@ -443,10 +458,11 @@ clip.set_output()
                 },
             },
         )?);
-        let video_details = decoder.video_details()?;
+        let video_details: VideoDetails = decoder.video_details()?;
         Ok(Decoder {
             decoder,
             video_details,
+            frames_read: 0,
         })
     }
 
@@ -521,6 +537,7 @@ clip.set_output()
         Ok(Decoder {
             decoder: decoder_impl,
             video_details,
+            frames_read: 0,
         })
     }
 
@@ -626,7 +643,99 @@ clip.set_output()
     ///   avoid keeping frames in memory for longer than needed
     #[inline]
     pub fn read_video_frame<T: Pixel>(&mut self) -> Result<Frame<T>, DecoderError> {
-        self.decoder.read_video_frame(&self.video_details)
+        let result = self.decoder.read_video_frame(
+            &self.video_details,
+            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))]
+            self.frames_read,
+        );
+        if result.is_ok() {
+            self.frames_read += 1;
+        }
+        result
+    }
+
+    /// Reads and decodes the specified video frame from the input.
+    ///
+    /// This method decodes the specified frame and returns it as a `Frame<T>`
+    /// where `T` is the pixel type. The pixel type must be compatible with the video's
+    /// bit depth and the decoder backend being used.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The pixel type to use for the decoded frame. Must implement the `Pixel` trait.
+    ///   Types include:
+    ///   - `u8` for 8-bit video
+    ///   - `u16` for 10-bit to 16-bit video
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok(Frame<T>)` - The decoded video frame
+    /// - `Err(DecoderError)` - An error if the frame cannot be read or decoded
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - End of file/stream is reached (`DecoderError::EndOfFile`)
+    /// - The frame data is corrupted or invalid (`DecoderError::GenericDecodeError`)
+    /// - There's an I/O error reading the input (`DecoderError::FileReadError`)
+    /// - The pixel type is incompatible with the video format
+    /// - The decoder does not support seeking (`DecoderError::UnsupportedDecoder`)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::Decoder;
+    ///
+    /// // Simple script that loads a video file
+    /// let script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// clip = core.ffms2.Source('input.mp4')
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let mut decoder = Decoder::from_script(script, None).unwrap();
+    /// let details = decoder.get_video_details();
+    ///
+    /// // Get the 42nd video frame, dynamically detecting the pixel type
+    /// if details.bit_depth > 8 {
+    ///     while let Ok(frame) = decoder.get_video_frame::<u16>(42) {
+    ///         println!("Frame size: {}x{}",
+    ///             frame.planes[0].cfg.width,
+    ///             frame.planes[0].cfg.height
+    ///         );
+    ///         // Process frame data...
+    ///     }
+    /// } else {
+    ///     while let Ok(frame) = decoder.get_video_frame::<u8>(42) {
+    ///         println!("Frame size: {}x{}",
+    ///             frame.planes[0].cfg.width,
+    ///             frame.planes[0].cfg.height
+    ///         );
+    ///         // Process frame data...
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// ## Performance Notes
+    ///
+    /// - Getting a specific video frame may not be supported by all backends
+    /// - Each frame contains uncompressed pixel values, which results in heavy memory usage;
+    ///   avoid keeping frames in memory for longer than needed
+    #[inline]
+    #[cfg(feature = "vapoursynth")]
+    pub fn get_video_frame<T: Pixel>(
+        &mut self,
+        frame_index: usize,
+    ) -> Result<Frame<T>, DecoderError> {
+        self.decoder.get_video_frame(
+            #[cfg(feature = "vapoursynth")]
+            &self.video_details,
+            #[cfg(feature = "vapoursynth")]
+            frame_index,
+        )
     }
 
     /// Returns a mutable reference to the VapourSynth environment.
@@ -824,13 +933,32 @@ impl DecoderImpl {
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
+        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
             Self::Y4m(dec) => helpers::y4m::read_video_frame::<Box<dyn Read>, T>(dec, cfg),
             #[cfg(feature = "vapoursynth")]
-            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg),
+            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
             #[cfg(feature = "ffmpeg")]
-            Self::Ffmpeg(dec) => dec.read_video_frame::<T>(),
+            Self::Ffmpeg(dec) => dec.read_video_frame::<T>(frame_index),
+        }
+    }
+
+    #[cfg(feature = "vapoursynth")]
+    pub(crate) fn get_video_frame<T: Pixel>(
+        &mut self,
+        cfg: &VideoDetails,
+        frame_index: usize,
+    ) -> Result<Frame<T>, DecoderError> {
+        match self {
+            Self::Y4m(_) => {
+                // Seeking to a specific frame in Y4M is not supported
+                Err(DecoderError::UnsupportedDecoder)
+            }
+            #[cfg(feature = "vapoursynth")]
+            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
+            #[cfg(feature = "ffmpeg")]
+            Self::Ffmpeg(_) => Err(DecoderError::UnsupportedDecoder),
         }
     }
 }
