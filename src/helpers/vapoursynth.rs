@@ -404,7 +404,7 @@ impl VapoursynthDecoder {
         if self.video_details.is_some_and(|details| {
             details
                 .total_frames
-                .is_some_and(|total_frames| frame_index > total_frames)
+                .is_some_and(|total_frames| frame_index >= total_frames)
         }) {
             return Err(DecoderError::EndOfFile);
         }
@@ -536,7 +536,7 @@ impl VapoursynthDecoder {
     }
 
     /// Register a callback function that modifies the VapourSynth output node
-    /// created during initializaation.
+    /// created during initialization.
     ///
     /// # Arguments
     ///
