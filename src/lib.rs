@@ -687,6 +687,7 @@ clip.set_output()
     /// ```no_run
     /// use av_decoders::Decoder;
     ///
+    /// // Simple script that loads a video file
     /// let script = r#"
     /// import vapoursynth as vs
     /// core = vs.core
@@ -695,7 +696,7 @@ clip.set_output()
     /// clip.set_output()
     /// "#;
     ///
-    /// let mut decoder = Decoder::from_script().unwrap();
+    /// let mut decoder = Decoder::from_script(script, None).unwrap();
     /// let details = decoder.get_video_details();
     ///
     /// // Get the 42nd video frame, dynamically detecting the pixel type
