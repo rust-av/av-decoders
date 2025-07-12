@@ -1,6 +1,6 @@
 [package]
 name = "av-decoders"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Josh Holmer <jholmer.in@gmail.com>"]
 edition = "2021"
 rust-version = "1.80"
@@ -44,6 +44,7 @@ missing_inline_in_public_items = "warn"
 missing_errors_doc = "warn"
 missing_panics_doc = "warn"
 missing_safety_doc = "warn"
+uninlined_format_args = "allow"
 unwrap_used = "warn"
 
 [dev-dependencies]

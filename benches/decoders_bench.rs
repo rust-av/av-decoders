@@ -150,7 +150,7 @@ clip.set_output(0)
             |mut decoder| {
                 let mut total_read_frames = 0;
                 for frame_index_offset in 0..(total_frames / SIMULTANEOUS_DECODERS) {
-                    for (decoder, start_frame, end_frame) in &mut decoder {
+                    for (decoder, start_frame, _end_frame) in &mut decoder {
                         if decoder
                             .get_video_frame::<u8>(*start_frame + frame_index_offset)
                             .is_ok()

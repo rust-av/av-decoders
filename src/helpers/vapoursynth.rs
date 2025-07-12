@@ -149,12 +149,12 @@ impl VapoursynthDecoder {
     /// use av_decoders::VapoursynthDecoder;
     ///
     /// // Load a VapourSynth script file
-    /// let decoder = VapoursynthDecoder::new("script.vpy")?;
+    /// let decoder = VapoursynthDecoder::from_file("script.vpy")?;
     ///
     /// // Using PathBuf
     /// use std::path::PathBuf;
     /// let script_path = PathBuf::from("processing_script.vpy");
-    /// let decoder = VapoursynthDecoder::new(&script_path)?;
+    /// let decoder = VapoursynthDecoder::from_file(&script_path)?;
     /// # Ok::<(), av_decoders::DecoderError>(())
     /// ```
     ///
@@ -330,14 +330,14 @@ impl VapoursynthDecoder {
     /// use std::collections::HashMap;
     ///
     /// // Load a VapourSynth script file
-    /// let mut decoder = VapoursynthDecoder::new("script.vpy");
+    /// let mut decoder = VapoursynthDecoder::from_file("script.vpy").unwrap();
     ///
     /// let variables = HashMap::from([
     ///     ("message".to_string(), "fluffy kittens".to_string()),
     ///     ("start_frame".to_string(), "82".to_string()),
     /// ]);
     ///
-    /// decoder.set_variables(variables)?;
+    /// decoder.set_variables(variables).unwrap();
     /// ```
     ///
     /// # VapourSynth Script Example

@@ -1,7 +1,9 @@
 # Changelog
 
-## Version 0.2.1
+## Version 0.3.0
 
+- [Breaking/Feature] Add seeking support to VapoursynthDecoder
+- [Feature] Add `modify_node` callback to VapoursynthDecoder
 - Fix the `from_file` method so that the Vapoursynth decoder is prioritized for `.vpy` inputs,
   and will be used as a fallback and work properly for video inputs. Ffmpeg will be prioritzed
   for video inputs if both features are enabled.
