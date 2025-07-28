@@ -24,6 +24,7 @@ mod helpers {
     pub(crate) mod vapoursynth;
     pub(crate) mod y4m;
 }
+mod util;
 
 #[cfg(feature = "ffmpeg")]
 pub use crate::helpers::ffmpeg::FfmpegDecoder;
@@ -237,6 +238,8 @@ impl Decoder {
         #[cfg(feature = "vapoursynth")]
         {
             // Build a vapoursynth script and use that
+            use crate::util::escape_python_string;
+
             let script = format!(
                 r#"
 import vapoursynth as vs
@@ -244,12 +247,13 @@ core = vs.core
 clip = core.ffms2.Source("{}")
 clip.set_output()
 "#,
-                std::path::absolute(input)
-                    .map_err(|e| DecoderError::FileReadError {
-                        cause: e.to_string()
-                    })?
-                    .to_string_lossy()
-                    .replace('"', "\\\"")
+                escape_python_string(
+                    &std::path::absolute(input)
+                        .map_err(|e| DecoderError::FileReadError {
+                            cause: e.to_string()
+                        })?
+                        .to_string_lossy()
+                )
             );
             let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script)?);
             let video_details = decoder.video_details()?;
