@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.3.1
+
+- fix: properly escape paths for VS scripts on Windows
+
 ## Version 0.3.0
 
 - [Breaking/Feature] Add seeking support to VapoursynthDecoder

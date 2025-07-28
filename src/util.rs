@@ -1,4 +1,4 @@
-#[cfg_attr(not(feature = "vapoursynth"), expect(dead_code))]
+#[cfg_attr(not(feature = "vapoursynth"), allow(dead_code))]
 pub(crate) fn escape_python_string(s: &str) -> String {
     s.chars()
         .map(|c| match c {
