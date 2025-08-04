@@ -120,7 +120,7 @@ impl VapoursynthDecoder {
     /// * `variables` - A `std::collections::HashMap<VariableName, VariableValue>`
     ///   containing the variable names and values to set. These will be passed to the
     ///   VapourSynth environment and can be accessed within the script using
-    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no variables are needed.
+    ///   `vs.get_output()` or similar mechanisms. Pass `HashMap::new()` if no variables are needed.
     ///
     /// # Returns
     ///
@@ -152,6 +152,7 @@ impl VapoursynthDecoder {
     ///
     /// ```rust,no_run
     /// use av_decoders::VapoursynthDecoder;
+    /// use std::collections::HashMap;
     ///
     /// // Load a VapourSynth script file
     /// let decoder = VapoursynthDecoder::from_file("script.vpy")?;
@@ -159,7 +160,7 @@ impl VapoursynthDecoder {
     /// // Using PathBuf
     /// use std::path::PathBuf;
     /// let script_path = PathBuf::from("processing_script.vpy");
-    /// let decoder = VapoursynthDecoder::from_file(&script_path)?;
+    /// let decoder = VapoursynthDecoder::from_file(&script_path, HashMap::new())?;
     /// # Ok::<(), av_decoders::DecoderError>(())
     /// ```
     ///
@@ -225,7 +226,7 @@ impl VapoursynthDecoder {
     /// * `variables` - A `std::collections::HashMap<VariableName, VariableValue>`
     ///   containing the variable names and values to set. These will be passed to the
     ///   VapourSynth environment and can be accessed within the script using
-    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no variables are needed.
+    ///   `vs.get_output()` or similar mechanisms. Pass `HashMap::new()` if no variables are needed.
     ///
     /// # Returns
     ///
@@ -258,6 +259,7 @@ impl VapoursynthDecoder {
     ///
     /// ```rust,no_run
     /// use av_decoders::VapoursynthDecoder;
+    /// use std::collections::HashMap;
     ///
     /// // Simple script that loads a video file
     /// let script = r#"
@@ -268,7 +270,7 @@ impl VapoursynthDecoder {
     /// clip.set_output()
     /// "#;
     ///
-    /// let decoder = VapoursynthDecoder::from_script(script)?;
+    /// let decoder = VapoursynthDecoder::from_script(script, HashMap::new())?;
     ///
     /// // More complex processing script
     /// let processing_script = r#"
@@ -287,7 +289,7 @@ impl VapoursynthDecoder {
     /// clip.set_output()
     /// "#;
     ///
-    /// let decoder = VapoursynthDecoder::from_script(processing_script)?;
+    /// let decoder = VapoursynthDecoder::from_script(processing_script, HashMap::new())?;
     /// # Ok::<(), av_decoders::DecoderError>(())
     /// ```
     ///
