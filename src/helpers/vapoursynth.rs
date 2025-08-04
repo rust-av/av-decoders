@@ -184,9 +184,7 @@ impl VapoursynthDecoder {
         variables: HashMap<VariableName, VariableValue>,
     ) -> Result<VapoursynthDecoder, DecoderError> {
         let mut decoder = Self::new()?;
-        if let Some(variables) = variables {
-            decoder.set_variables(variables)?;
-        }
+        decoder.set_variables(variables)?;
         decoder
             .get_env()
             .eval_file(input, EvalFlags::SetWorkingDir)
@@ -303,9 +301,7 @@ impl VapoursynthDecoder {
         variables: HashMap<VariableName, VariableValue>,
     ) -> Result<VapoursynthDecoder, DecoderError> {
         let mut decoder = Self::new()?;
-        if let Some(variables) = variables {
-            decoder.set_variables(variables)?;
-        }
+        decoder.set_variables(variables)?;
         decoder.get_env().eval_script(script).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
             | vapoursynth::vsscript::Error::FileOpen(_)
