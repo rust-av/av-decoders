@@ -180,7 +180,7 @@ impl VapoursynthDecoder {
     #[inline]
     pub fn from_file<P: AsRef<Path>>(
         input: P,
-        variables: Option<HashMap<VariableName, VariableValue>>,
+        variables: HashMap<VariableName, VariableValue>,
     ) -> Result<VapoursynthDecoder, DecoderError> {
         let mut decoder = Self::new()?;
         if let Some(variables) = variables {
@@ -298,7 +298,7 @@ impl VapoursynthDecoder {
     #[inline]
     pub fn from_script(
         script: &str,
-        variables: Option<HashMap<VariableName, VariableValue>>,
+        variables: HashMap<VariableName, VariableValue>,
     ) -> Result<VapoursynthDecoder, DecoderError> {
         let mut decoder = Self::new()?;
         if let Some(variables) = variables {
