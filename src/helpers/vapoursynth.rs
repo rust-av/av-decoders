@@ -155,7 +155,7 @@ impl VapoursynthDecoder {
     /// use std::collections::HashMap;
     ///
     /// // Load a VapourSynth script file
-    /// let decoder = VapoursynthDecoder::from_file("script.vpy")?;
+    /// let decoder = VapoursynthDecoder::from_file("script.vpy", HashMap::new())?;
     ///
     /// // Using PathBuf
     /// use std::path::PathBuf;
@@ -349,7 +349,7 @@ impl VapoursynthDecoder {
     /// use std::collections::HashMap;
     ///
     /// // Load a VapourSynth script file
-    /// let mut decoder = VapoursynthDecoder::from_file("script.vpy").unwrap();
+    /// let mut decoder = VapoursynthDecoder::from_file("script.vpy", HashMap::new()).unwrap();
     ///
     /// let variables = HashMap::from([
     ///     ("message".to_string(), "fluffy kittens".to_string()),

@@ -9,6 +9,8 @@ use av_decoders::FfmpegDecoder;
 use av_decoders::VapoursynthDecoder;
 use av_decoders::{Decoder, Y4mDecoder};
 use criterion::{criterion_group, criterion_main, Criterion};
+#[cfg(feature = "vapoursynth")]
+use std::collections::HashMap;
 use std::{
     fs::File,
     hint::black_box,
@@ -82,14 +84,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
                 Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-                    VapoursynthDecoder::from_script(&script).unwrap(),
+                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
                 )))
                 .unwrap()
             },
@@ -119,7 +121,7 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let initial_decoder = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(
-            black_box(VapoursynthDecoder::from_script(&script).unwrap()),
+            black_box(VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap()),
         ))
         .unwrap();
         let initial_details = initial_decoder.get_video_details();
@@ -130,11 +132,12 @@ clip.set_output(0)
             || {
                 let mut decoders = Vec::with_capacity(SIMULTANEOUS_DECODERS);
                 for i in 0..SIMULTANEOUS_DECODERS {
-                    let decoder =
-                        Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(
-                            black_box(VapoursynthDecoder::from_script(&script).unwrap()),
-                        ))
-                        .unwrap();
+                    let decoder = Decoder::from_decoder_impl(
+                        av_decoders::DecoderImpl::Vapoursynth(black_box(
+                            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+                        )),
+                    )
+                    .unwrap();
                     let frames_per_decoder = total_frames / SIMULTANEOUS_DECODERS;
                     let start_frame = i * frames_per_decoder;
                     let end_frame = if i == SIMULTANEOUS_DECODERS - 1 {
@@ -184,14 +187,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
                 Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-                    VapoursynthDecoder::from_script(&script).unwrap(),
+                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
                 )))
                 .unwrap()
             },
@@ -224,13 +227,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
-                let mut vapoursynth_decoder = VapoursynthDecoder::from_script(&script).unwrap();
+                let mut vapoursynth_decoder =
+                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap();
                 vapoursynth_decoder
                     .register_node_modifier(Box::new(move |core, node| {
                         // Node is expected to exist
@@ -367,14 +371,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
                 Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-                    VapoursynthDecoder::from_script(&script).unwrap(),
+                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
                 )))
                 .unwrap()
             },

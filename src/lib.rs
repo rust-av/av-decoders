@@ -212,7 +212,8 @@ impl Decoder {
             #[cfg(feature = "vapoursynth")]
             if ext == "vpy" {
                 // Decode vapoursynth script file input
-                let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input, None)?);
+                let decoder =
+                    DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input, HashMap::new())?);
                 let video_details = decoder.video_details()?;
                 return Ok(Decoder {
                     decoder,
@@ -255,7 +256,8 @@ clip.set_output()
                         .to_string_lossy()
                 )
             );
-            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script, None)?);
+            let decoder =
+                DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script, HashMap::new())?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
@@ -290,7 +292,7 @@ clip.set_output()
     ///
     /// * `variables` - Optional script variables as key-value pairs. These will be passed
     ///   to the VapourSynth environment and can be accessed within the script using
-    ///   `vs.get_output()` or similar mechanisms. Pass `None` if no variables are needed.
+    ///   `vs.get_output()` or similar mechanisms. Pass `HashMap::new()` if no variables are needed.
     ///
     /// # Returns
     ///
@@ -322,7 +324,7 @@ clip.set_output()
     /// clip.set_output()
     /// "#;
     ///
-    /// let decoder = Decoder::from_script(script, None)?;
+    /// let decoder = Decoder::from_script(script, HashMap::new())?;
     /// let details = decoder.get_video_details();
     /// println!("Video: {}x{} @ {} fps", details.width, details.height, details.frame_rate);
     ///
@@ -344,7 +346,7 @@ clip.set_output()
     /// variables.insert("filename".to_string(), "video.mp4".to_string());
     /// variables.insert("width".to_string(), "1280".to_string());
     ///
-    /// let mut decoder = Decoder::from_script(script_with_args, Some(variables))?;
+    /// let mut decoder = Decoder::from_script(script_with_args, variables)?;
     ///
     /// // Read frames from the processed video
     /// while let Ok(frame) = decoder.read_video_frame::<u8>() {
@@ -359,6 +361,8 @@ clip.set_output()
     ///
     /// ```no_run
     /// # use av_decoders::Decoder;
+    /// use std::collections::HashMap;
+    ///
     /// let advanced_script = r#"
     /// import vapoursynth as vs
     /// core = vs.core
@@ -378,16 +382,16 @@ clip.set_output()
     /// clip.set_output()
     /// "#;
     ///
-    /// let decoder = Decoder::from_script(advanced_script, None)?;
+    /// let decoder = Decoder::from_script(advanced_script, HashMap::new())?;
     /// # Ok::<(), av_decoders::DecoderError>(())
     /// ```
     #[inline]
     #[cfg(feature = "vapoursynth")]
     pub fn from_script(
         script: &str,
-        variables: Option<HashMap<VariableName, VariableValue>>,
+        variables: HashMap<VariableName, VariableValue>,
     ) -> Result<Decoder, DecoderError> {
-        let mut dec = VapoursynthDecoder::from_script(script, variables)?;
+        let dec = VapoursynthDecoder::from_script(script, variables)?;
         let decoder = DecoderImpl::Vapoursynth(dec);
         let video_details = decoder.video_details()?;
         Ok(Decoder {
@@ -687,6 +691,7 @@ clip.set_output()
     ///
     /// ```no_run
     /// use av_decoders::Decoder;
+    /// use std::collections::HashMap;
     ///
     /// // Simple script that loads a video file
     /// let script = r#"
@@ -697,7 +702,7 @@ clip.set_output()
     /// clip.set_output()
     /// "#;
     ///
-    /// let mut decoder = Decoder::from_script(script, None).unwrap();
+    /// let mut decoder = Decoder::from_script(script, HashMap::new()).unwrap();
     /// let details = decoder.get_video_details();
     ///
     /// // Get the 42nd video frame, dynamically detecting the pixel type
@@ -868,7 +873,7 @@ clip.set_output()
     /// clip.set_output()
     /// "#;
     ///
-    /// let decoder = Decoder::from_script(script, None)?;
+    /// let decoder = Decoder::from_script(script, HashMap::new())?;
     ///
     /// // Get the node and use it for further processing
     /// let node = decoder.get_vapoursynth_node()?;

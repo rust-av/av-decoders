@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.4.0
+
+- feat!: add support for passing variables to VapourSynth scripts
+
 ## Version 0.3.1
 
 - fix: properly escape paths for VS scripts on Windows
