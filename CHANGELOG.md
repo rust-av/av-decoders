@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.5.0
+
+- feat: compatibility with ffmpeg 8.0
+
 ## Version 0.4.0
 
 - feat!: add support for passing variables to VapourSynth scripts
