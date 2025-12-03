@@ -70,6 +70,18 @@ pub enum DecoderError {
         cause: String,
     },
 
+    /// Internal FFMS2 error.
+    ///
+    /// This error occurs when FFMS2 encounters an internal problem during
+    /// decoding operations, such as codec issues or corrupted video data.
+    /// Only available when the `ffms2` feature is enabled.
+    #[cfg(feature = "ffms2")]
+    #[error("FFMS2 internal error ({cause})")]
+    Ffms2InternalError {
+        /// The underlying cause of the error
+        cause: String,
+    },
+
     /// Generic decoder error for issues not covered by specific error types.
     ///
     /// This is a catch-all error for various decoding problems that don't fit

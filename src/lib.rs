@@ -20,6 +20,8 @@ mod error;
 mod helpers {
     #[cfg(feature = "ffmpeg")]
     pub(crate) mod ffmpeg;
+    #[cfg(feature = "ffms2")]
+    pub(crate) mod ffms2;
     #[cfg(feature = "vapoursynth")]
     pub(crate) mod vapoursynth;
     pub(crate) mod y4m;
@@ -28,6 +30,8 @@ mod util;
 
 #[cfg(feature = "ffmpeg")]
 pub use crate::helpers::ffmpeg::FfmpegDecoder;
+#[cfg(feature = "ffms2")]
+pub use crate::helpers::ffms2::Ffms2Decoder;
 #[cfg(feature = "vapoursynth")]
 pub use crate::helpers::vapoursynth::ModifyNode;
 #[cfg(feature = "vapoursynth")]
@@ -58,7 +62,7 @@ pub struct VideoDetails {
     ///
     /// Common values include:
     /// - `ChromaSampling::Cs420` for 4:2:0 subsampling (most common)
-    /// - `ChromaSampling::Cs422` for 4:2:2 subsampling  
+    /// - `ChromaSampling::Cs422` for 4:2:2 subsampling
     /// - `ChromaSampling::Cs444` for 4:4:4 subsampling (no chroma subsampling)
     pub chroma_sampling: ChromaSampling,
     /// The frame rate of the video as a rational number (frames per second).
@@ -136,8 +140,8 @@ impl Decoder {
     /// Creates a new decoder from a file path.
     ///
     /// This method automatically detects the input format and selects the most appropriate
-    /// decoder backend. It will prioritize Y4M files for performance, then FFmpeg for speed,
-    /// and finally Vapoursynth.
+    /// decoder backend. It will prioritize Y4M files for performance, then Ffms2 for speed,
+    /// followed by Ffmpeg, and finally Vapoursynth.
     ///
     /// # Arguments
     ///
@@ -221,6 +225,18 @@ impl Decoder {
                     frames_read: 0,
                 });
             }
+        }
+
+        // Ffms2 is the fastest and most reliable, use it if available.
+        #[cfg(feature = "ffms2")]
+        {
+            let decoder = DecoderImpl::Ffms2(Ffms2Decoder::new(input)?);
+            let video_details = decoder.video_details()?;
+            return Ok(Decoder {
+                decoder,
+                video_details,
+                frames_read: 0,
+            });
         }
 
         // Ffmpeg is considerably faster at decoding, so we should prefer it over Vapoursynth
@@ -488,6 +504,7 @@ clip.set_output()
     ///   - `DecoderImpl::Y4m` for Y4M format decoding
     ///   - `DecoderImpl::Vapoursynth` for VapourSynth-based decoding (requires `vapoursynth` feature)
     ///   - `DecoderImpl::Ffmpeg` for FFmpeg-based decoding (requires `ffmpeg` feature)
+    ///   - `DecoderImpl::Ffms2` for FFMS2-based decoding (requires `ffms2` feature)
     ///
     /// # Returns
     ///
@@ -650,7 +667,7 @@ clip.set_output()
     pub fn read_video_frame<T: Pixel>(&mut self) -> Result<Frame<T>, DecoderError> {
         let result = self.decoder.read_video_frame(
             &self.video_details,
-            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))]
+            #[cfg(any(feature = "ffmpeg", feature = "vapoursynth", feature = "ffms2"))]
             self.frames_read,
         );
         if result.is_ok() {
@@ -788,7 +805,7 @@ clip.set_output()
     ///     // Note: This is a simplified example - actual VapourSynth API usage
     ///     // would require more specific vapoursynth crate methods
     ///     println!("VapourSynth environment available");
-    ///     
+    ///
     ///     // You can now use the environment for advanced VapourSynth operations
     ///     // such as loading plugins, creating nodes, etc.
     /// }
@@ -848,12 +865,12 @@ clip.set_output()
     ///     // You can now use this node for additional VapourSynth operations
     ///     // Note: This example shows the concept - actual usage would depend
     ///     // on specific VapourSynth operations you want to perform
-    ///     
+    ///
     ///     println!("Got VapourSynth node");
-    ///     
+    ///
     ///     // Example: You could apply additional filters to this node
     ///     // let filtered_node = apply_custom_filter(node);
-    ///     
+    ///
     ///     // Or use it to create a new processing pipeline
     ///     // let output_node = create_processing_pipeline(node);
     /// }
@@ -884,7 +901,7 @@ clip.set_output()
     /// ```
     #[inline]
     #[cfg(feature = "vapoursynth")]
-    pub fn get_vapoursynth_node(&self) -> Result<Node, DecoderError> {
+    pub fn get_vapoursynth_node(&self) -> Result<Node<'_>, DecoderError> {
         match self.decoder {
             DecoderImpl::Vapoursynth(ref dec) => Ok(dec.get_output_node()),
             _ => Err(DecoderError::UnsupportedDecoder),
@@ -923,6 +940,14 @@ pub enum DecoderImpl {
     /// when the `ffmpeg` feature is enabled.
     #[cfg(feature = "ffmpeg")]
     Ffmpeg(FfmpegDecoder),
+
+    /// FFMS2-based decoder for general video format support.
+    ///
+    /// This variant uses FFMS2 for broad video format compatibility, serving as a
+    /// fallback decoder for formats not handled by other backends. Only available
+    /// when the `ffms2` feature is enabled.
+    #[cfg(feature = "ffms2")]
+    Ffms2(Ffms2Decoder),
 }
 
 impl DecoderImpl {
@@ -933,13 +958,16 @@ impl DecoderImpl {
             Self::Vapoursynth(dec) => dec.get_video_details(),
             #[cfg(feature = "ffmpeg")]
             Self::Ffmpeg(dec) => Ok(dec.video_details),
+            #[cfg(feature = "ffms2")]
+            Self::Ffms2(dec) => Ok(dec.video_details),
         }
     }
 
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
-        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth"))] frame_index: usize,
+        #[cfg(any(feature = "ffmpeg", feature = "vapoursynth", feature = "ffms2"))]
+        frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
             Self::Y4m(dec) => helpers::y4m::read_video_frame::<Box<dyn Read>, T>(dec, cfg),
@@ -947,6 +975,8 @@ impl DecoderImpl {
             Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
             #[cfg(feature = "ffmpeg")]
             Self::Ffmpeg(dec) => dec.read_video_frame::<T>(frame_index),
+            #[cfg(feature = "ffms2")]
+            Self::Ffms2(dec) => dec.read_video_frame::<T>(frame_index),
         }
     }
 
@@ -957,14 +987,9 @@ impl DecoderImpl {
         frame_index: usize,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
-            Self::Y4m(_) => {
-                // Seeking to a specific frame in Y4M is not supported
-                Err(DecoderError::UnsupportedDecoder)
-            }
             #[cfg(feature = "vapoursynth")]
             Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
-            #[cfg(feature = "ffmpeg")]
-            Self::Ffmpeg(_) => Err(DecoderError::UnsupportedDecoder),
+            _ => Err(DecoderError::UnsupportedDecoder),
         }
     }
 }
