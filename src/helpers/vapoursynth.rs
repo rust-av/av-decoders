@@ -527,7 +527,7 @@ impl VapoursynthDecoder {
     /// # Returns
     ///
     /// Returns `vapoursynth::vsscript::Node`.
-    pub(crate) fn get_output_node(&self) -> Node {
+    pub(crate) fn get_output_node(&self) -> Node<'_> {
         let output_node = match self.env.get_output(OUTPUT_INDEX) {
             Ok(output) => {
                 let (output_node, _) = output;
@@ -584,7 +584,7 @@ impl VapoursynthDecoder {
     pub fn register_node_modifier(
         &mut self,
         modify_node: ModifyNode,
-    ) -> Result<Node, DecoderError> {
+    ) -> Result<Node<'_>, DecoderError> {
         let core = self
             .env
             .get_core()

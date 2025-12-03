@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.6.0
+
+- feat: add ffms2 decoder interface
+
 ## Version 0.5.0
 
 - feat: compatibility with ffmpeg 8.0
