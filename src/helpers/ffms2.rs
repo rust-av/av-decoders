@@ -102,6 +102,8 @@ impl Ffms2Decoder {
 
         let index_handle = Self::get_index(input.as_ref())?;
 
+        let threads = std::thread::available_parallelism().map_or(8, std::num::NonZero::get) as i32;
+
         let source =
             CString::new(index_handle.path.as_str()).map_err(|e| DecoderError::FileReadError {
                 cause: e.to_string(),
@@ -112,8 +114,8 @@ impl Ffms2Decoder {
                 source.as_ptr(),
                 index_handle.track,
                 index_handle.idx_handle,
-                1,
-                1,
+                threads,
+                0,
                 std::ptr::addr_of_mut!(err),
             )
         };

@@ -10,13 +10,13 @@ repository = "https://github.com/rust-av/av-decoders"
 include = ["src/**/*", "LICENSE"]
 
 [dependencies]
-ffmpeg-the-third = { version = "4.0.0", optional = true, default-features = false, features = [
+ffmpeg-the-third = { version = "4.0.1", optional = true, default-features = false, features = [
     "codec",
     "format",
 ] }
 ffms2-sys = { version = "0.2.0", optional = true }
 num-rational = "0.4.2"
-thiserror = "2.0.12"
+thiserror = "2.0.17"
 v_frame = "0.3.9"
 vapoursynth = { version = "0.4.0", features = [
     "vsscript-functions",
@@ -51,7 +51,7 @@ uninlined_format_args = "allow"
 unwrap_used = "warn"
 
 [dev-dependencies]
-criterion = "0.6.0"
+criterion = "0.8.0"
 
 [[bench]]
 name = "decoders_bench"
