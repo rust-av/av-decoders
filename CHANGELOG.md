@@ -1,6 +1,12 @@
 # Changelog
 
-## Version 0.6.0
+## Version 0.6.1
+
+- fix: actually have the ffms2 decoder decode the whole image
+- fix: ensure linear decoding mode for ffms decoder (in the future this should probably be a user-switchable param)
+- perf: enable threading for ffms decoder
+
+## Version 0.6.0 [yanked]
 
 - feat: add ffms2 decoder interface
 
