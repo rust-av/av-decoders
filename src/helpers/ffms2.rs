@@ -155,7 +155,7 @@ impl Ffms2Decoder {
     /// * `DecoderError::UnsupportedFormat` - The bit depth / chroma combination is not currently supported by this library.
     #[inline]
     pub fn set_output_format(
-        &self,
+        &mut self,
         width: usize,
         height: usize,
         bit_depth: u8,
@@ -173,6 +173,9 @@ impl Ffms2Decoder {
             );
             free_error_info(&mut err);
         }
+
+        self.video_details = Self::get_video_details(self.video_source)?;
+
         Ok(())
     }
 
@@ -266,8 +269,8 @@ impl Ffms2Decoder {
             let props = FFMS_GetVideoProperties(video);
             let frame = FFMS_GetFrame(video, 0, std::ptr::addr_of_mut!(err));
 
-            let width = (*frame).EncodedWidth as usize;
-            let height = (*frame).EncodedHeight as usize;
+            let width = (*frame).ScaledWidth as usize;
+            let height = (*frame).ScaledHeight as usize;
             let frame_rate =
                 Rational32::new((*props).FPSNumerator as i32, (*props).FPSDenominator as i32);
             let total_frames = Some((*props).NumFrames as usize);
