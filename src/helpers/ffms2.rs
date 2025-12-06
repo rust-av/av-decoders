@@ -10,7 +10,8 @@ use ffms2_sys::{
     FFMS_CreateIndexer, FFMS_CreateVideoSource, FFMS_DestroyIndex, FFMS_DestroyVideoSource,
     FFMS_DoIndexing2, FFMS_ErrorInfo, FFMS_GetFirstIndexedTrackOfType, FFMS_GetFrame,
     FFMS_GetPixFmt, FFMS_GetVideoProperties, FFMS_Index, FFMS_IndexBelongsToFile, FFMS_Init,
-    FFMS_ReadIndex, FFMS_TrackType, FFMS_TrackTypeIndexSettings, FFMS_VideoSource, FFMS_WriteIndex,
+    FFMS_ReadIndex, FFMS_Resizers, FFMS_SetOutputFormatV2, FFMS_TrackType,
+    FFMS_TrackTypeIndexSettings, FFMS_VideoSource, FFMS_WriteIndex,
 };
 use num_rational::Rational32;
 use v_frame::{
@@ -137,6 +138,42 @@ impl Ffms2Decoder {
             video_source,
             index_handle,
         })
+    }
+
+    /// Sets the FFMS2 video source output characteristics, allowing for fast resizing and bit depth conversion.
+    ///
+    /// This forwards the requested resolution, bit depth, and chroma layout through `FFMS_SetOutputFormatV2` before
+    /// decoding, making the resizing transparent to the consumer.
+    ///
+    /// # Parameters
+    /// * `width` - Desired output width in pixels.
+    /// * `height` - Desired output height in pixels.
+    /// * `bit_depth` - Desired per-plane bit depth (e.g., 10 for 10-bit output).
+    /// * `chroma_subsampling` - Tuple matching the FFMS2 chroma layout (horizontal, vertical).
+    ///
+    /// # Errors
+    /// * `DecoderError::UnsupportedFormat` - The bit depth / chroma combination is not currently supported by this library.
+    #[inline]
+    pub fn set_output_format(
+        &self,
+        width: usize,
+        height: usize,
+        bit_depth: u8,
+        chroma_subsampling: (u8, u8),
+    ) -> Result<(), DecoderError> {
+        unsafe {
+            let mut err = empty_error_info();
+            FFMS_SetOutputFormatV2(
+                self.video_source,
+                [video_info_to_pixel_format(bit_depth, chroma_subsampling)?].as_ptr(),
+                width as i32,
+                height as i32,
+                FFMS_Resizers::FFMS_RESIZER_BICUBIC as i32,
+                std::ptr::addr_of_mut!(err),
+            );
+            free_error_info(&mut err);
+        }
+        Ok(())
     }
 
     fn get_index(input: &Path) -> Result<FfmsIndex, DecoderError> {
@@ -402,6 +439,36 @@ fn pixel_format_to_video_info(pix_fmt: i32) -> Result<(usize, ChromaSampling), D
             fmt: format!("Unsupported pixel format: {}", pix_fmt),
         }),
     }
+}
+
+fn video_info_to_pixel_format(
+    bit_depth: u8,
+    chroma_subsampling: (u8, u8),
+) -> Result<i32, DecoderError> {
+    Ok(
+        match (bit_depth, chroma_subsampling.0 + chroma_subsampling.1) {
+            // 8-bit formats
+            (8, 2) => *AV_PIX_FMT_YUV420P,
+            (8, 1) => *AV_PIX_FMT_YUV422P,
+            (8, 0) => *AV_PIX_FMT_YUV444P,
+
+            // 10-bit formats
+            (10, 2) => *AV_PIX_FMT_YUV420P10LE,
+            (10, 1) => *AV_PIX_FMT_YUV422P10LE,
+            (10, 0) => *AV_PIX_FMT_YUV444P10LE,
+
+            // 12-bit formats
+            (12, 2) => *AV_PIX_FMT_YUV420P12LE,
+            (12, 1) => *AV_PIX_FMT_YUV422P12LE,
+            (12, 0) => *AV_PIX_FMT_YUV444P12LE,
+
+            _ => {
+                return Err(DecoderError::UnsupportedFormat {
+                    fmt: "Unsupported bit depth and subsampling combination".to_string(),
+                });
+            }
+        },
+    )
 }
 
 const ERR_BUFFER_SIZE: usize = 1024;
