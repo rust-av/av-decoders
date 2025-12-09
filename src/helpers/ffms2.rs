@@ -143,7 +143,11 @@ impl Ffms2Decoder {
     /// Sets the FFMS2 video source output characteristics, allowing for fast resizing and bit depth conversion.
     ///
     /// This forwards the requested resolution, bit depth, and chroma layout through `FFMS_SetOutputFormatV2` before
-    /// decoding, making the resizing transparent to the consumer.
+    /// decoding, making the resizing transparent to the consumer. Currently supports converting to YUV420, 422, or 444
+    /// in 8-bit, 10-bit, or 12-bit. Any input formats are supported.
+    ///
+    /// If the resolution is equivalent to the input, no resizing is performed. If the bit depth and subsampling
+    /// are equivalent to the input, no colorspace resampling is performed.
     ///
     /// # Parameters
     /// * `width` - Desired output width in pixels.
