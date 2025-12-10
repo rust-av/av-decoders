@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 0.6.2
+
+- feat: add `set_output_format` method for ffms2 decoder
+- bump `ffms2-sys` dependency to 0.3
+
 ## Version 0.6.1
 
 - fix: actually have the ffms2 decoder decode the whole image
