@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.6.4
+
+- feat: add `ffms2_static` feature to link a static ffms2
+
 ## Version 0.6.3
 
 - feat: make ffms2's `video_details` field public to make using `set_output_format` less painful

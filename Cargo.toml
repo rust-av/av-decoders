@@ -1,6 +1,6 @@
 [package]
 name = "av-decoders"
-version = "0.6.3"
+version = "0.6.4"
 authors = ["Josh Holmer <jholmer.in@gmail.com>"]
 edition = "2021"
 rust-version = "1.80"
@@ -32,11 +32,17 @@ vapoursynth = ["dep:vapoursynth"]
 # Support decoding via ffmpeg
 ffmpeg = ["dep:ffmpeg-the-third"]
 # Link a FFmpeg version built statically
-ffmpeg_static = ["ffmpeg-the-third/static"]
+ffmpeg_static = ["ffmpeg", "ffmpeg-the-third/static"]
 # Build FFmpeg statically
-ffmpeg_build = ["ffmpeg-the-third/build", "ffmpeg-the-third/build-lib-dav1d"]
+ffmpeg_build = [
+    "ffmpeg",
+    "ffmpeg-the-third/build",
+    "ffmpeg-the-third/build-lib-dav1d",
+]
 # Support decoding via ffms2
 ffms2 = ["dep:ffms2-sys"]
+# Link ffms2 statically
+ffms2_static = ["ffms2", "ffms2-sys/static"]
 
 [lints.rust]
 missing_docs = "warn"
