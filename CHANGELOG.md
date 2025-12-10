@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.6.3
+
+- feat: make ffms2's `video_details` field public to make using `set_output_format` less painful
+
 ## Version 0.6.2
 
 - feat: add `set_output_format` method for ffms2 decoder

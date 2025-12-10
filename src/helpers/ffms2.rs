@@ -38,7 +38,8 @@ static FFMS2_INIT: Once = Once::new();
 /// This struct contains raw pointers and should be used with care. The `Drop` implementation
 /// ensures proper cleanup of resources.
 pub struct Ffms2Decoder {
-    pub(crate) video_details: VideoDetails,
+    /// Contains the resolution and bit depth of the loaded video stream
+    pub video_details: VideoDetails,
     video_source: *mut FFMS_VideoSource,
     #[expect(dead_code, reason = "Keep alive until drop")]
     index_handle: FfmsIndex,
