@@ -413,6 +413,7 @@ impl VapoursynthDecoder {
         &mut self,
         cfg: &VideoDetails,
         frame_index: usize,
+        luma_only: bool,
     ) -> Result<Frame<T>, DecoderError> {
         const SB_SIZE_LOG2: usize = 6;
         const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
@@ -484,22 +485,25 @@ impl VapoursynthDecoder {
                 vs_frame.stride(0),
                 bytes,
             );
-            f.planes[1].copy_from_raw_u8(
-                slice::from_raw_parts(
-                    vs_frame.data_ptr(1),
-                    vs_frame.stride(1) * vs_frame.height(1),
-                ),
-                vs_frame.stride(1),
-                bytes,
-            );
-            f.planes[2].copy_from_raw_u8(
-                slice::from_raw_parts(
-                    vs_frame.data_ptr(2),
-                    vs_frame.stride(2) * vs_frame.height(2),
-                ),
-                vs_frame.stride(2),
-                bytes,
-            );
+
+            if !luma_only {
+                f.planes[1].copy_from_raw_u8(
+                    slice::from_raw_parts(
+                        vs_frame.data_ptr(1),
+                        vs_frame.stride(1) * vs_frame.height(1),
+                    ),
+                    vs_frame.stride(1),
+                    bytes,
+                );
+                f.planes[2].copy_from_raw_u8(
+                    slice::from_raw_parts(
+                        vs_frame.data_ptr(2),
+                        vs_frame.stride(2) * vs_frame.height(2),
+                    ),
+                    vs_frame.stride(2),
+                    bytes,
+                );
+            }
         }
         Ok(f)
     }
