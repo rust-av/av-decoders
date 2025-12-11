@@ -176,6 +176,11 @@ impl Ffms2Decoder {
                 FFMS_Resizers::FFMS_RESIZER_BICUBIC as i32,
                 std::ptr::addr_of_mut!(err),
             );
+            if err.ErrorType != 0 {
+                return Err(DecoderError::Ffms2InternalError {
+                    cause: get_error_message(err),
+                });
+            }
             free_error_info(&mut err);
         }
 
@@ -274,8 +279,16 @@ impl Ffms2Decoder {
             let props = FFMS_GetVideoProperties(video);
             let frame = FFMS_GetFrame(video, 0, std::ptr::addr_of_mut!(err));
 
-            let width = (*frame).ScaledWidth as usize;
-            let height = (*frame).ScaledHeight as usize;
+            let width = if (*frame).ScaledWidth > 0 {
+                (*frame).ScaledWidth
+            } else {
+                (*frame).EncodedWidth
+            } as usize;
+            let height = if (*frame).ScaledHeight > 0 {
+                (*frame).ScaledHeight
+            } else {
+                (*frame).EncodedHeight
+            } as usize;
             let frame_rate =
                 Rational32::new((*props).FPSNumerator as i32, (*props).FPSDenominator as i32);
             let total_frames = Some((*props).NumFrames as usize);
