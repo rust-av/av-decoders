@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 0.6.5
+
+- fix: fix width and height returned from ffms2 `get_video_details` when no scaling was happening
+- fix: return error code when ffms2 rescaling fails
+- fix: proper video format conversion for ffms2
+
 ## Version 0.6.4
 
 - feat: add `ffms2_static` feature to link a static ffms2

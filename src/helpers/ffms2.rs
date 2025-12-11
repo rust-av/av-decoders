@@ -170,7 +170,12 @@ impl Ffms2Decoder {
             let mut err = empty_error_info();
             FFMS_SetOutputFormatV2(
                 self.video_source,
-                [video_info_to_pixel_format(bit_depth, chroma_subsampling)?].as_ptr(),
+                // I HATE C
+                [
+                    video_info_to_pixel_format(bit_depth, chroma_subsampling)?,
+                    -1,
+                ]
+                .as_ptr(),
                 width as i32,
                 height as i32,
                 FFMS_Resizers::FFMS_RESIZER_BICUBIC as i32,
