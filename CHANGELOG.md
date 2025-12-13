@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.6.6
+
+- feat: add `luma_only` option to only return luma planes, may help perf for some applications
+
 ## Version 0.6.5
 
 - fix: fix width and height returned from ffms2 `get_video_details` when no scaling was happening
