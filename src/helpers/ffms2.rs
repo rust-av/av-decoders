@@ -318,6 +318,7 @@ impl Ffms2Decoder {
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         frame_index: usize,
+        luma_only: bool,
     ) -> Result<Frame<T>, DecoderError> {
         if frame_index
             >= self
@@ -364,16 +365,19 @@ impl Ffms2Decoder {
                 (*raw_frame).Linesize[0] as usize * f.planes[0].cfg.height,
             );
             f.planes[0].copy_from_raw_u8(y_plane, (*raw_frame).Linesize[0] as usize, bytes);
-            let u_plane = slice::from_raw_parts(
-                (*raw_frame).Data[1],
-                (*raw_frame).Linesize[1] as usize * f.planes[1].cfg.height,
-            );
-            f.planes[1].copy_from_raw_u8(u_plane, (*raw_frame).Linesize[1] as usize, bytes);
-            let v_plane = slice::from_raw_parts(
-                (*raw_frame).Data[2],
-                (*raw_frame).Linesize[2] as usize * f.planes[2].cfg.height,
-            );
-            f.planes[2].copy_from_raw_u8(v_plane, (*raw_frame).Linesize[2] as usize, bytes);
+
+            if !luma_only {
+                let u_plane = slice::from_raw_parts(
+                    (*raw_frame).Data[1],
+                    (*raw_frame).Linesize[1] as usize * f.planes[1].cfg.height,
+                );
+                f.planes[1].copy_from_raw_u8(u_plane, (*raw_frame).Linesize[1] as usize, bytes);
+                let v_plane = slice::from_raw_parts(
+                    (*raw_frame).Data[2],
+                    (*raw_frame).Linesize[2] as usize * f.planes[2].cfg.height,
+                );
+                f.planes[2].copy_from_raw_u8(v_plane, (*raw_frame).Linesize[2] as usize, bytes);
+            }
         }
         Ok(f)
     }

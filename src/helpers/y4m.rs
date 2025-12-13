@@ -47,6 +47,7 @@ const fn map_y4m_color_space(color_space: y4m::Colorspace) -> ChromaSampling {
 pub fn read_video_frame<R: Read, T: Pixel>(
     dec: &mut y4m::Decoder<R>,
     cfg: &VideoDetails,
+    luma_only: bool,
 ) -> Result<Frame<T>, DecoderError> {
     const SB_SIZE_LOG2: usize = 6;
     const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
@@ -65,8 +66,11 @@ pub fn read_video_frame<R: Read, T: Pixel>(
                 .get_chroma_dimensions(cfg.width, cfg.height);
 
             f.planes[0].copy_from_raw_u8(frame.get_y_plane(), cfg.width * bytes, bytes);
-            f.planes[1].copy_from_raw_u8(frame.get_u_plane(), chroma_width * bytes, bytes);
-            f.planes[2].copy_from_raw_u8(frame.get_v_plane(), chroma_width * bytes, bytes);
+
+            if !luma_only {
+                f.planes[1].copy_from_raw_u8(frame.get_u_plane(), chroma_width * bytes, bytes);
+                f.planes[2].copy_from_raw_u8(frame.get_v_plane(), chroma_width * bytes, bytes);
+            }
             f
         })
         .map_err(|e| match e {

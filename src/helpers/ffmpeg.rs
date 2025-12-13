@@ -176,7 +176,7 @@ impl FfmpegDecoder {
         })
     }
 
-    fn decode_frame<T: Pixel>(&self, decoded: &frame::Video) -> Frame<T> {
+    fn decode_frame<T: Pixel>(&self, decoded: &frame::Video, luma_only: bool) -> Frame<T> {
         const SB_SIZE_LOG2: usize = 6;
         const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
         const SUBPEL_FILTER_SIZE: usize = 8;
@@ -198,14 +198,18 @@ impl FfmpegDecoder {
             .chroma_sampling
             .get_chroma_dimensions(width, height);
         f.planes[0].copy_from_raw_u8(decoded.data(0), width * bytes, bytes);
-        f.planes[1].copy_from_raw_u8(decoded.data(1), chroma_width * bytes, bytes);
-        f.planes[2].copy_from_raw_u8(decoded.data(2), chroma_width * bytes, bytes);
+
+        if !luma_only {
+            f.planes[1].copy_from_raw_u8(decoded.data(1), chroma_width * bytes, bytes);
+            f.planes[2].copy_from_raw_u8(decoded.data(2), chroma_width * bytes, bytes);
+        }
         f
     }
 
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         frame_index: usize,
+        luma_only: bool,
     ) -> Result<Frame<T>, DecoderError> {
         // For some reason there's a crap ton of work needed to get ffmpeg to do
         // something simple, because each codec has it's own stupid way of doing
@@ -251,7 +255,7 @@ impl FfmpegDecoder {
                 }
 
                 if self.decoder.receive_frame(&mut decoded).is_ok() {
-                    let f = self.decode_frame(&decoded);
+                    let f = self.decode_frame(&decoded, luma_only);
                     return Ok(f);
                 } else if self.end_of_stream {
                     return Err(DecoderError::EndOfFile);

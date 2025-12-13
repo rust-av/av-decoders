@@ -76,6 +76,13 @@ pub struct VideoDetails {
     pub total_frames: Option<usize>,
 }
 
+/// A set of possible configuration flags that are generic across all decoders.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DecoderConfig {
+    /// If `true`, the decoder will only fetch the luma planes from the video.
+    pub luma_only: bool,
+}
+
 #[cfg(test)]
 impl Default for VideoDetails {
     #[inline]
@@ -134,6 +141,7 @@ pub struct Decoder {
     decoder: DecoderImpl,
     video_details: VideoDetails,
     frames_read: usize,
+    config: DecoderConfig,
 }
 
 impl Decoder {
@@ -210,6 +218,7 @@ impl Decoder {
                     decoder,
                     video_details,
                     frames_read: 0,
+                    config: DecoderConfig::default(),
                 });
             }
 
@@ -223,6 +232,7 @@ impl Decoder {
                     decoder,
                     video_details,
                     frames_read: 0,
+                    config: DecoderConfig::default(),
                 });
             }
         }
@@ -236,6 +246,7 @@ impl Decoder {
                 decoder,
                 video_details,
                 frames_read: 0,
+                config: DecoderConfig::default(),
             });
         }
 
@@ -249,6 +260,7 @@ impl Decoder {
                 decoder,
                 video_details,
                 frames_read: 0,
+                config: DecoderConfig::default(),
             });
         }
 
@@ -279,6 +291,7 @@ clip.set_output()
                 decoder,
                 video_details,
                 frames_read: 0,
+                config: DecoderConfig::default(),
             });
         }
 
@@ -414,6 +427,7 @@ clip.set_output()
             decoder,
             video_details,
             frames_read: 0,
+            config: DecoderConfig::default(),
         })
     }
 
@@ -484,6 +498,7 @@ clip.set_output()
             decoder,
             video_details,
             frames_read: 0,
+            config: DecoderConfig::default(),
         })
     }
 
@@ -560,6 +575,7 @@ clip.set_output()
             decoder: decoder_impl,
             video_details,
             frames_read: 0,
+            config: DecoderConfig::default(),
         })
     }
 
@@ -601,6 +617,13 @@ clip.set_output()
     #[inline]
     pub fn get_video_details(&self) -> &VideoDetails {
         &self.video_details
+    }
+
+    /// Sets the decoder to only fetch the luma planes from the video.
+    /// This may improve performance for applications that do not need chroma data.
+    #[inline]
+    pub fn set_luma_only(&mut self, enabled: bool) {
+        self.config.luma_only = enabled;
     }
 
     /// Reads and decodes the next video frame from the input.
@@ -669,6 +692,7 @@ clip.set_output()
             &self.video_details,
             #[cfg(any(feature = "ffmpeg", feature = "vapoursynth", feature = "ffms2"))]
             self.frames_read,
+            self.config.luma_only,
         );
         if result.is_ok() {
             self.frames_read += 1;
@@ -758,6 +782,7 @@ clip.set_output()
             &self.video_details,
             #[cfg(feature = "vapoursynth")]
             frame_index,
+            self.config.luma_only,
         )
     }
 
@@ -968,15 +993,18 @@ impl DecoderImpl {
         cfg: &VideoDetails,
         #[cfg(any(feature = "ffmpeg", feature = "vapoursynth", feature = "ffms2"))]
         frame_index: usize,
+        luma_only: bool,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
-            Self::Y4m(dec) => helpers::y4m::read_video_frame::<Box<dyn Read>, T>(dec, cfg),
+            Self::Y4m(dec) => {
+                helpers::y4m::read_video_frame::<Box<dyn Read>, T>(dec, cfg, luma_only)
+            }
             #[cfg(feature = "vapoursynth")]
-            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
+            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index, luma_only),
             #[cfg(feature = "ffmpeg")]
-            Self::Ffmpeg(dec) => dec.read_video_frame::<T>(frame_index),
+            Self::Ffmpeg(dec) => dec.read_video_frame::<T>(frame_index, luma_only),
             #[cfg(feature = "ffms2")]
-            Self::Ffms2(dec) => dec.read_video_frame::<T>(frame_index),
+            Self::Ffms2(dec) => dec.read_video_frame::<T>(frame_index, luma_only),
         }
     }
 
@@ -985,10 +1013,11 @@ impl DecoderImpl {
         &mut self,
         cfg: &VideoDetails,
         frame_index: usize,
+        luma_only: bool,
     ) -> Result<Frame<T>, DecoderError> {
         match self {
             #[cfg(feature = "vapoursynth")]
-            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index),
+            Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index, luma_only),
             _ => Err(DecoderError::UnsupportedDecoder),
         }
     }
