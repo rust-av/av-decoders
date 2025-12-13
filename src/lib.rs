@@ -76,15 +76,11 @@ pub struct VideoDetails {
     pub total_frames: Option<usize>,
 }
 
-#[derive(Debug, Clone, Copy)]
+/// A set of possible configuration flags that are generic across all decoders.
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DecoderConfig {
+    /// If `true`, the decoder will only fetch the luma planes from the video.
     pub luma_only: bool,
-}
-
-impl Default for DecoderConfig {
-    fn default() -> Self {
-        Self { luma_only: false }
-    }
 }
 
 #[cfg(test)]
@@ -623,6 +619,8 @@ clip.set_output()
         &self.video_details
     }
 
+    /// Sets the decoder to only fetch the luma planes from the video.
+    /// This may improve performance for applications that do not need chroma data.
     #[inline]
     pub fn set_luma_only(&mut self, enabled: bool) {
         self.config.luma_only = enabled;
