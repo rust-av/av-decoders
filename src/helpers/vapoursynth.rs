@@ -1,10 +1,16 @@
 use crate::error::DecoderError;
-use crate::VideoDetails;
+use crate::{LUMA_PADDING, VideoDetails};
 use num_rational::Rational32;
-use std::{collections::HashMap, mem::size_of, path::Path, slice};
+use std::{
+    collections::HashMap,
+    num::{NonZeroU8, NonZeroUsize},
+    path::Path,
+    slice,
+};
 use v_frame::{
-    frame::Frame,
-    pixel::{ChromaSampling, Pixel},
+    chroma::ChromaSubsampling,
+    frame::{Frame, FrameBuilder},
+    pixel::Pixel,
 };
 use vapoursynth::{
     api::API,
@@ -334,7 +340,7 @@ impl VapoursynthDecoder {
     /// Sets the variables in the VapourSynth environment.
     ///
     /// This function sets the variables in the VapourSynth environment provided
-    /// in the `variables` HashMap.
+    /// in the `variables` hash map.
     ///
     /// # Arguments
     ///
@@ -386,7 +392,7 @@ impl VapoursynthDecoder {
         &mut self,
         variables: HashMap<VariableName, VariableValue>,
     ) -> Result<(), DecoderError> {
-        let api = API::get().ok_or(DecoderError::VapoursynthInternalError {
+        let api = API::get().ok_or_else(|| DecoderError::VapoursynthInternalError {
             cause: "failed to get Vapoursynth API instance".to_string(),
         })?;
         let mut variables_map = OwnedMap::new(api);
@@ -417,19 +423,12 @@ impl VapoursynthDecoder {
         }
     }
 
-    #[allow(clippy::transmute_ptr_to_ptr)]
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
         frame_index: usize,
         luma_only: bool,
     ) -> Result<Frame<T>, DecoderError> {
-        const SB_SIZE_LOG2: usize = 6;
-        const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
-        const SUBPEL_FILTER_SIZE: usize = 8;
-        const FRAME_MARGIN: usize = 16 + SUBPEL_FILTER_SIZE;
-        const LUMA_PADDING: usize = SB_SIZE + FRAME_MARGIN;
-
         if self.video_details.is_some_and(|details| {
             details
                 .total_frames
@@ -480,41 +479,84 @@ impl VapoursynthDecoder {
             .get_frame(frame_index)
             .map_err(|_| DecoderError::EndOfFile)?;
 
-        let bytes = size_of::<T>();
-        let mut f: Frame<T> =
-            Frame::new_with_padding(cfg.width, cfg.height, cfg.chroma_sampling, LUMA_PADDING);
+        let mut frame: Frame<T> = FrameBuilder::new(
+            NonZeroUsize::new(cfg.width).ok_or_else(|| DecoderError::GenericDecodeError {
+                cause: "Zero-width resolution is not supported".to_string(),
+            })?,
+            NonZeroUsize::new(cfg.height).ok_or_else(|| DecoderError::GenericDecodeError {
+                cause: "Zero-height resolution is not supported".to_string(),
+            })?,
+            if luma_only {
+                ChromaSubsampling::Monochrome
+            } else {
+                cfg.chroma_sampling
+            },
+            NonZeroU8::new(cfg.bit_depth as u8).ok_or_else(|| {
+                DecoderError::GenericDecodeError {
+                    cause: "Zero-bit-depth is not supported".to_string(),
+                }
+            })?,
+        )
+        .luma_padding_bottom(LUMA_PADDING)
+        .luma_padding_top(LUMA_PADDING)
+        .luma_padding_left(LUMA_PADDING)
+        .luma_padding_right(LUMA_PADDING)
+        .build()
+        .map_err(|e| DecoderError::GenericDecodeError {
+            cause: e.to_string(),
+        })?;
 
-        // SAFETY: We are using the stride to compute the length of the data slice
-        unsafe {
-            f.planes[0].copy_from_raw_u8(
-                slice::from_raw_parts(
-                    vs_frame.data_ptr(0),
-                    vs_frame.stride(0) * vs_frame.height(0),
-                ),
-                vs_frame.stride(0),
-                bytes,
-            );
-
-            if !luma_only {
-                f.planes[1].copy_from_raw_u8(
+        frame
+            .y_plane
+            .copy_from_u8_slice_with_stride(
+                // SAFETY: we assume that the values provided by VapourSynth are correct
+                unsafe {
                     slice::from_raw_parts(
-                        vs_frame.data_ptr(1),
-                        vs_frame.stride(1) * vs_frame.height(1),
-                    ),
-                    vs_frame.stride(1),
-                    bytes,
-                );
-                f.planes[2].copy_from_raw_u8(
-                    slice::from_raw_parts(
-                        vs_frame.data_ptr(2),
-                        vs_frame.stride(2) * vs_frame.height(2),
-                    ),
-                    vs_frame.stride(2),
-                    bytes,
-                );
-            }
+                        vs_frame.data_ptr(0),
+                        vs_frame.stride(0) * vs_frame.height(0),
+                    )
+                },
+                NonZeroUsize::new(vs_frame.stride(0)).expect("zero stride should be impossible"),
+            )
+            .map_err(|e| DecoderError::GenericDecodeError {
+                cause: e.to_string(),
+            })?;
+        if let Some(u_plane) = frame.u_plane.as_mut() {
+            u_plane
+                .copy_from_u8_slice_with_stride(
+                    // SAFETY: we assume that the values provided by VapourSynth are correct
+                    unsafe {
+                        slice::from_raw_parts(
+                            vs_frame.data_ptr(1),
+                            vs_frame.stride(1) * vs_frame.height(1),
+                        )
+                    },
+                    NonZeroUsize::new(vs_frame.stride(1))
+                        .expect("zero stride should be impossible"),
+                )
+                .map_err(|e| DecoderError::GenericDecodeError {
+                    cause: e.to_string(),
+                })?;
         }
-        Ok(f)
+        if let Some(v_plane) = frame.v_plane.as_mut() {
+            v_plane
+                .copy_from_u8_slice_with_stride(
+                    // SAFETY: we assume that the values provided by VapourSynth are correct
+                    unsafe {
+                        slice::from_raw_parts(
+                            vs_frame.data_ptr(2),
+                            vs_frame.stride(2) * vs_frame.height(2),
+                        )
+                    },
+                    NonZeroUsize::new(vs_frame.stride(2))
+                        .expect("zero stride should be impossible"),
+                )
+                .map_err(|e| DecoderError::GenericDecodeError {
+                    cause: e.to_string(),
+                })?;
+        }
+
+        Ok(frame)
     }
 
     /// Get the VapourSynth environment.
@@ -613,7 +655,7 @@ impl VapoursynthDecoder {
                 Err(e) => {
                     return Err(DecoderError::VapoursynthInternalError {
                         cause: e.to_string(),
-                    })
+                    });
                 }
             }
         };
@@ -682,22 +724,22 @@ fn get_frame_rate(info: VideoInfo) -> Result<Rational32, DecoderError> {
 }
 
 /// Get the chroma sampling from a Vapoursynth `VideoInfo` struct.
-fn get_chroma_sampling(info: VideoInfo) -> Result<ChromaSampling, DecoderError> {
+fn get_chroma_sampling(info: VideoInfo) -> Result<ChromaSubsampling, DecoderError> {
     let format = info.format;
     match format.color_family() {
         vapoursynth::format::ColorFamily::YUV => {
             let ss = (format.sub_sampling_w(), format.sub_sampling_h());
             match ss {
-                (1, 1) => Ok(ChromaSampling::Cs420),
-                (1, 0) => Ok(ChromaSampling::Cs422),
-                (0, 0) => Ok(ChromaSampling::Cs444),
+                (1, 1) => Ok(ChromaSubsampling::Yuv420),
+                (1, 0) => Ok(ChromaSubsampling::Yuv422),
+                (0, 0) => Ok(ChromaSubsampling::Yuv444),
                 (x, y) => Err(DecoderError::UnsupportedChromaSubsampling {
                     x: x.into(),
                     y: y.into(),
                 }),
             }
         }
-        vapoursynth::format::ColorFamily::Gray => Ok(ChromaSampling::Cs400),
+        vapoursynth::format::ColorFamily::Gray => Ok(ChromaSubsampling::Monochrome),
         fmt => Err(DecoderError::UnsupportedFormat {
             fmt: fmt.to_string(),
         }),

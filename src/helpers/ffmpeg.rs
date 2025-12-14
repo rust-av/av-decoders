@@ -1,6 +1,9 @@
 extern crate ffmpeg_the_third as ffmpeg;
 
-use std::path::Path;
+use std::{
+    num::{NonZeroU8, NonZeroUsize},
+    path::Path,
+};
 
 use ffmpeg::{
     codec::{decoder, packet},
@@ -12,11 +15,12 @@ use ffmpeg::{
 use ffmpeg_the_third::threading;
 use num_rational::Rational32;
 use v_frame::{
-    frame::Frame,
-    pixel::{ChromaSampling, Pixel},
+    chroma::ChromaSubsampling,
+    frame::{Frame, FrameBuilder},
+    pixel::Pixel,
 };
 
-use crate::{error::DecoderError, VideoDetails};
+use crate::{LUMA_PADDING, VideoDetails, error::DecoderError};
 
 /// An interface that is used for decoding a video stream using ffmpeg
 ///
@@ -150,15 +154,15 @@ impl FfmpegDecoder {
                     format::pixel::Pixel::YUV420P
                     | format::pixel::Pixel::YUVJ420P
                     | format::pixel::Pixel::YUV420P10LE
-                    | format::pixel::Pixel::YUV420P12LE => ChromaSampling::Cs420,
+                    | format::pixel::Pixel::YUV420P12LE => ChromaSubsampling::Yuv420,
                     format::pixel::Pixel::YUV422P
                     | format::pixel::Pixel::YUVJ422P
                     | format::pixel::Pixel::YUV422P10LE
-                    | format::pixel::Pixel::YUV422P12LE => ChromaSampling::Cs422,
+                    | format::pixel::Pixel::YUV422P12LE => ChromaSubsampling::Yuv422,
                     format::pixel::Pixel::YUV444P
                     | format::pixel::Pixel::YUVJ444P
                     | format::pixel::Pixel::YUV444P10LE
-                    | format::pixel::Pixel::YUV444P12LE => ChromaSampling::Cs444,
+                    | format::pixel::Pixel::YUV444P12LE => ChromaSubsampling::Yuv444,
                     fmt => {
                         return Err(DecoderError::UnsupportedFormat {
                             fmt: format!("{fmt:?}"),
@@ -176,34 +180,62 @@ impl FfmpegDecoder {
         })
     }
 
-    fn decode_frame<T: Pixel>(&self, decoded: &frame::Video, luma_only: bool) -> Frame<T> {
-        const SB_SIZE_LOG2: usize = 6;
-        const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
-        const SUBPEL_FILTER_SIZE: usize = 8;
-        const FRAME_MARGIN: usize = 16 + SUBPEL_FILTER_SIZE;
-        const LUMA_PADDING: usize = SB_SIZE + FRAME_MARGIN;
-
-        let mut f: Frame<T> = Frame::new_with_padding(
-            self.video_details.width,
-            self.video_details.height,
-            self.video_details.chroma_sampling,
-            LUMA_PADDING,
-        );
+    fn decode_frame<T: Pixel>(
+        &self,
+        decoded: &frame::Video,
+        luma_only: bool,
+    ) -> Result<Frame<T>, DecoderError> {
         let width = self.video_details.width;
         let height = self.video_details.height;
         let bit_depth = self.video_details.bit_depth;
-        let bytes = if bit_depth > 8 { 2 } else { 1 };
-        let (chroma_width, _) = self
-            .video_details
-            .chroma_sampling
-            .get_chroma_dimensions(width, height);
-        f.planes[0].copy_from_raw_u8(decoded.data(0), width * bytes, bytes);
+        let chroma_sampling = self.video_details.chroma_sampling;
+        let mut frame: Frame<T> = FrameBuilder::new(
+            NonZeroUsize::new(width).ok_or_else(|| DecoderError::GenericDecodeError {
+                cause: "Zero-width resolution is not supported".to_string(),
+            })?,
+            NonZeroUsize::new(height).ok_or_else(|| DecoderError::GenericDecodeError {
+                cause: "Zero-height resolution is not supported".to_string(),
+            })?,
+            if luma_only {
+                ChromaSubsampling::Monochrome
+            } else {
+                chroma_sampling
+            },
+            NonZeroU8::new(bit_depth as u8).ok_or_else(|| DecoderError::GenericDecodeError {
+                cause: "Zero-bit-depth is not supported".to_string(),
+            })?,
+        )
+        .luma_padding_bottom(LUMA_PADDING)
+        .luma_padding_top(LUMA_PADDING)
+        .luma_padding_left(LUMA_PADDING)
+        .luma_padding_right(LUMA_PADDING)
+        .build()
+        .map_err(|e| DecoderError::GenericDecodeError {
+            cause: e.to_string(),
+        })?;
 
-        if !luma_only {
-            f.planes[1].copy_from_raw_u8(decoded.data(1), chroma_width * bytes, bytes);
-            f.planes[2].copy_from_raw_u8(decoded.data(2), chroma_width * bytes, bytes);
+        frame
+            .y_plane
+            .copy_from_u8_slice(decoded.data(0))
+            .map_err(|e| DecoderError::GenericDecodeError {
+                cause: e.to_string(),
+            })?;
+        if let Some(u_plane) = frame.u_plane.as_mut() {
+            u_plane.copy_from_u8_slice(decoded.data(1)).map_err(|e| {
+                DecoderError::GenericDecodeError {
+                    cause: e.to_string(),
+                }
+            })?;
         }
-        f
+        if let Some(v_plane) = frame.v_plane.as_mut() {
+            v_plane.copy_from_u8_slice(decoded.data(2)).map_err(|e| {
+                DecoderError::GenericDecodeError {
+                    cause: e.to_string(),
+                }
+            })?;
+        }
+
+        Ok(frame)
     }
 
     pub(crate) fn read_video_frame<T: Pixel>(
@@ -256,7 +288,7 @@ impl FfmpegDecoder {
 
                 if self.decoder.receive_frame(&mut decoded).is_ok() {
                     let f = self.decode_frame(&decoded, luma_only);
-                    return Ok(f);
+                    return f;
                 } else if self.end_of_stream {
                     return Err(DecoderError::EndOfFile);
                 }

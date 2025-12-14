@@ -7,10 +7,11 @@
 #[cfg(feature = "vapoursynth")]
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{stdin, BufReader, Read};
+use std::io::{BufReader, Read, stdin};
 use std::path::Path;
+use v_frame::chroma::ChromaSubsampling;
 use v_frame::frame::Frame;
-use v_frame::pixel::{ChromaSampling, Pixel};
+use v_frame::pixel::Pixel;
 #[cfg(feature = "vapoursynth")]
 use vapoursynth::node::Node;
 #[cfg(feature = "vapoursynth")]
@@ -45,6 +46,13 @@ pub use y4m::Decoder as Y4mDecoder;
 
 const Y4M_EXTENSIONS: &[&str] = &["y4m", "yuv"];
 
+// TODO: Get rid of these and make padding an optional parameter
+const SB_SIZE_LOG2: usize = 6;
+const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
+const SUBPEL_FILTER_SIZE: usize = 8;
+const FRAME_MARGIN: usize = 16 + SUBPEL_FILTER_SIZE;
+const LUMA_PADDING: usize = SB_SIZE + FRAME_MARGIN;
+
 /// Video metadata and configuration details.
 ///
 /// This struct contains essential information about a video stream that is needed
@@ -61,10 +69,11 @@ pub struct VideoDetails {
     /// The chroma subsampling format used by the video.
     ///
     /// Common values include:
-    /// - `ChromaSampling::Cs420` for 4:2:0 subsampling (most common)
-    /// - `ChromaSampling::Cs422` for 4:2:2 subsampling
-    /// - `ChromaSampling::Cs444` for 4:4:4 subsampling (no chroma subsampling)
-    pub chroma_sampling: ChromaSampling,
+    /// - `ChromaSubsampling::Yuv420` for 4:2:0 subsampling (most common)
+    /// - `ChromaSubsampling::Yuv422` for 4:2:2 subsampling
+    /// - `ChromaSubsampling::Yuv444` for 4:4:4 subsampling (no chroma subsampling)
+    /// - `ChromaSubsampling::Monochrome` for monochrome
+    pub chroma_sampling: ChromaSubsampling,
     /// The frame rate of the video as a rational number (frames per second).
     ///
     /// Examples:
@@ -91,7 +100,7 @@ impl Default for VideoDetails {
             width: 640,
             height: 480,
             bit_depth: 8,
-            chroma_sampling: ChromaSampling::Cs420,
+            chroma_sampling: ChromaSubsampling::Yuv420,
             frame_rate: Rational32::new(30, 1),
             total_frames: None,
         }
@@ -189,8 +198,11 @@ impl Decoder {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    #[allow(unreachable_code)]
-    #[allow(clippy::needless_return)]
+    #[expect(clippy::allow_attributes)]
+    #[allow(
+        unreachable_code,
+        reason = "some branches are unreachable with some combinations of features"
+    )]
     pub fn from_file<P: AsRef<Path>>(input: P) -> Result<Decoder, DecoderError> {
         // A raw y4m parser is going to be the fastest with the least overhead,
         // so we should use it if we have a y4m file.
@@ -462,7 +474,7 @@ clip.set_output()
     ///     match decoder.read_video_frame::<u8>() {
     ///         Ok(frame) => {
     ///             // Process the frame
-    ///             println!("Received frame: {}x{}", frame.planes[0].cfg.width, frame.planes[0].cfg.height);
+    ///             println!("Received frame: {}x{}", frame.y_plane.width(), frame.y_plane.height());
     ///         }
     ///         Err(av_decoders::DecoderError::EndOfFile) => break,
     ///         Err(e) => return Err(e),
@@ -597,7 +609,7 @@ clip.set_output()
     ///
     /// ```no_run
     /// use av_decoders::Decoder;
-    /// use v_frame::pixel::ChromaSampling;
+    /// use v_frame::chroma::ChromaSubsampling;
     ///
     /// let decoder = Decoder::from_file("video.y4m").unwrap();
     /// let details = decoder.get_video_details();
@@ -607,14 +619,15 @@ clip.set_output()
     /// println!("Frame rate: {} fps", details.frame_rate);
     ///
     /// match details.chroma_sampling {
-    ///     ChromaSampling::Cs420 => println!("4:2:0 chroma subsampling"),
-    ///     ChromaSampling::Cs422 => println!("4:2:2 chroma subsampling"),
-    ///     ChromaSampling::Cs444 => println!("4:4:4 chroma subsampling"),
+    ///     ChromaSubsampling::Yuv420 => println!("4:2:0 chroma subsampling"),
+    ///     ChromaSubsampling::Yuv422 => println!("4:2:2 chroma subsampling"),
+    ///     ChromaSubsampling::Yuv444 => println!("4:4:4 chroma subsampling"),
     ///     _ => println!("Other chroma subsampling"),
     /// }
     /// # Ok::<(), av_decoders::DecoderError>(())
     /// ```
     #[inline]
+    #[must_use]
     pub fn get_video_details(&self) -> &VideoDetails {
         &self.video_details
     }
@@ -665,16 +678,16 @@ clip.set_output()
     /// if details.bit_depth > 8 {
     ///     while let Ok(frame) = decoder.read_video_frame::<u16>() {
     ///         println!("Frame size: {}x{}",
-    ///             frame.planes[0].cfg.width,
-    ///             frame.planes[0].cfg.height
+    ///             frame.y_plane.width(),
+    ///             frame.y_plane.height()
     ///         );
     ///         // Process frame data...
     ///     }
     /// } else {
     ///     while let Ok(frame) = decoder.read_video_frame::<u8>() {
     ///         println!("Frame size: {}x{}",
-    ///             frame.planes[0].cfg.width,
-    ///             frame.planes[0].cfg.height
+    ///             frame.y_plane.width(),
+    ///             frame.y_plane.height()
     ///         );
     ///         // Process frame data...
     ///     }
@@ -750,16 +763,16 @@ clip.set_output()
     /// if details.bit_depth > 8 {
     ///     while let Ok(frame) = decoder.get_video_frame::<u16>(42) {
     ///         println!("Frame size: {}x{}",
-    ///             frame.planes[0].cfg.width,
-    ///             frame.planes[0].cfg.height
+    ///             frame.y_plane.width(),
+    ///             frame.y_plane.height()
     ///         );
     ///         // Process frame data...
     ///     }
     /// } else {
     ///     while let Ok(frame) = decoder.get_video_frame::<u8>(42) {
     ///         println!("Frame size: {}x{}",
-    ///             frame.planes[0].cfg.width,
-    ///             frame.planes[0].cfg.height
+    ///             frame.y_plane.width(),
+    ///             frame.y_plane.height()
     ///         );
     ///         // Process frame data...
     ///     }

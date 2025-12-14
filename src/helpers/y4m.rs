@@ -1,11 +1,15 @@
-use std::io::Read;
+use std::{
+    io::Read,
+    num::{NonZeroU8, NonZeroUsize},
+};
 
 use crate::error::DecoderError;
-use crate::VideoDetails;
+use crate::{LUMA_PADDING, VideoDetails};
 use num_rational::Rational32;
 use v_frame::{
-    frame::Frame,
-    pixel::{ChromaSampling, Pixel},
+    chroma::ChromaSubsampling,
+    frame::{Frame, FrameBuilder},
+    pixel::Pixel,
 };
 
 pub fn get_video_details<R: Read>(dec: &y4m::Decoder<R>) -> VideoDetails {
@@ -27,19 +31,16 @@ pub fn get_video_details<R: Read>(dec: &y4m::Decoder<R>) -> VideoDetails {
     }
 }
 
-const fn map_y4m_color_space(color_space: y4m::Colorspace) -> ChromaSampling {
+const fn map_y4m_color_space(color_space: y4m::Colorspace) -> ChromaSubsampling {
     use y4m::Colorspace::{
-        C420jpeg, C420mpeg2, C420p10, C420p12, C420paldv, C422p10, C422p12, C444p10, C444p12,
-        Cmono, Cmono12, C420, C422, C444,
+        C420, C420jpeg, C420mpeg2, C420p10, C420p12, C420paldv, C422, C422p10, C422p12, C444,
+        C444p10, C444p12, Cmono, Cmono12,
     };
-    use ChromaSampling::{Cs400, Cs420, Cs422, Cs444};
     match color_space {
-        Cmono | Cmono12 => Cs400,
-        C420jpeg | C420paldv => Cs420,
-        C420mpeg2 => Cs420,
-        C420 | C420p10 | C420p12 => Cs420,
-        C422 | C422p10 | C422p12 => Cs422,
-        C444 | C444p10 | C444p12 => Cs444,
+        Cmono | Cmono12 => ChromaSubsampling::Monochrome,
+        C420jpeg | C420paldv | C420mpeg2 | C420 | C420p10 | C420p12 => ChromaSubsampling::Yuv420,
+        C422 | C422p10 | C422p12 => ChromaSubsampling::Yuv422,
+        C444 | C444p10 | C444p12 => ChromaSubsampling::Yuv444,
         _ => unimplemented!(),
     }
 }
@@ -49,34 +50,58 @@ pub fn read_video_frame<R: Read, T: Pixel>(
     cfg: &VideoDetails,
     luma_only: bool,
 ) -> Result<Frame<T>, DecoderError> {
-    const SB_SIZE_LOG2: usize = 6;
-    const SB_SIZE: usize = 1 << SB_SIZE_LOG2;
-    const SUBPEL_FILTER_SIZE: usize = 8;
-    const FRAME_MARGIN: usize = 16 + SUBPEL_FILTER_SIZE;
-    const LUMA_PADDING: usize = SB_SIZE + FRAME_MARGIN;
+    let dec_frame = dec.read_frame().map_err(|e| match e {
+        y4m::Error::EOF => DecoderError::EndOfFile,
+        _ => DecoderError::GenericDecodeError {
+            cause: e.to_string(),
+        },
+    })?;
 
-    let bytes = dec.get_bytes_per_sample();
-    dec.read_frame()
-        .map(|frame| {
-            let mut f: Frame<T> =
-                Frame::new_with_padding(cfg.width, cfg.height, cfg.chroma_sampling, LUMA_PADDING);
+    let mut frame: Frame<T> = FrameBuilder::new(
+        NonZeroUsize::new(cfg.width).ok_or_else(|| DecoderError::GenericDecodeError {
+            cause: "Zero-width resolution is not supported".to_string(),
+        })?,
+        NonZeroUsize::new(cfg.height).ok_or_else(|| DecoderError::GenericDecodeError {
+            cause: "Zero-height resolution is not supported".to_string(),
+        })?,
+        if luma_only {
+            ChromaSubsampling::Monochrome
+        } else {
+            cfg.chroma_sampling
+        },
+        NonZeroU8::new(cfg.bit_depth as u8).ok_or_else(|| DecoderError::GenericDecodeError {
+            cause: "Zero-bit-depth is not supported".to_string(),
+        })?,
+    )
+    .luma_padding_bottom(LUMA_PADDING)
+    .luma_padding_top(LUMA_PADDING)
+    .luma_padding_left(LUMA_PADDING)
+    .luma_padding_right(LUMA_PADDING)
+    .build()
+    .map_err(|e| DecoderError::GenericDecodeError {
+        cause: e.to_string(),
+    })?;
 
-            let (chroma_width, _) = cfg
-                .chroma_sampling
-                .get_chroma_dimensions(cfg.width, cfg.height);
-
-            f.planes[0].copy_from_raw_u8(frame.get_y_plane(), cfg.width * bytes, bytes);
-
-            if !luma_only {
-                f.planes[1].copy_from_raw_u8(frame.get_u_plane(), chroma_width * bytes, bytes);
-                f.planes[2].copy_from_raw_u8(frame.get_v_plane(), chroma_width * bytes, bytes);
-            }
-            f
-        })
-        .map_err(|e| match e {
-            y4m::Error::EOF => DecoderError::EndOfFile,
-            _ => DecoderError::GenericDecodeError {
+    frame
+        .y_plane
+        .copy_from_u8_slice(dec_frame.get_y_plane())
+        .map_err(|e| DecoderError::GenericDecodeError {
+            cause: e.to_string(),
+        })?;
+    if let Some(u_plane) = frame.u_plane.as_mut() {
+        u_plane
+            .copy_from_u8_slice(dec_frame.get_u_plane())
+            .map_err(|e| DecoderError::GenericDecodeError {
                 cause: e.to_string(),
-            },
-        })
+            })?;
+    }
+    if let Some(v_plane) = frame.v_plane.as_mut() {
+        v_plane
+            .copy_from_u8_slice(dec_frame.get_v_plane())
+            .map_err(|e| DecoderError::GenericDecodeError {
+                cause: e.to_string(),
+            })?;
+    }
+
+    Ok(frame)
 }
