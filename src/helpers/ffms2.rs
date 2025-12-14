@@ -1,5 +1,6 @@
 use std::{
     ffi::CString,
+    ffi::c_char,
     num::{NonZeroU8, NonZeroUsize},
     path::Path,
     slice,
@@ -631,7 +632,7 @@ unsafe fn empty_error_info() -> FFMS_ErrorInfo {
     let mut err: FFMS_ErrorInfo = unsafe { std::mem::zeroed() };
     // Allocate 1024 bytes for the error buffer
     let buffer = vec![0u8; ERR_BUFFER_SIZE];
-    let buffer_ptr = buffer.as_ptr() as *mut i8;
+    let buffer_ptr = buffer.as_ptr() as *mut c_char;
     #[expect(
         clippy::mem_forget,
         reason = "intentionally avoid drop here, must be freed by caller"
