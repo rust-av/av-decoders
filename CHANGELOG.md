@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.8.0
+
+- chore!: update to `v_frame` 0.4
+
 ## Version 0.7.0
 
 - fix!: update compatibility with Vapoursynth R73

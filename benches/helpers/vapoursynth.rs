@@ -1,12 +1,10 @@
-#![cfg(feature = "vapoursynth")]
-
 use std::path::Path;
 
 use av_decoders::DecoderError;
 use vapoursynth::{api::API, core::CoreRef, format::PresetFormat, node::Node, plugin::Plugin};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
+#[expect(dead_code)]
 enum PluginId {
     Std,
     Resize,
@@ -60,7 +58,7 @@ pub(crate) fn import_lsmash<'core>(
 ) -> Result<Node<'core>, DecoderError> {
     let input = input.as_ref();
     let api = API::get()
-        .ok_or(DecoderError::VapoursynthInternalError {
+        .ok_or_else(|| DecoderError::VapoursynthInternalError {
             cause: "Failed to get VapourSynth API".to_owned(),
         })
         .unwrap();
@@ -83,13 +81,7 @@ pub(crate) fn import_lsmash<'core>(
     // Enable cache by default.
     if let Some(cache) = cache {
         arguments
-            .set_int(
-                "cache",
-                match cache {
-                    true => 1,
-                    false => 0,
-                },
-            )
+            .set_int("cache", if cache { 1 } else { 0 })
             .map_err(|_| DecoderError::VapoursynthArgsError {
                 cause: error_message(),
             })
@@ -124,7 +116,7 @@ pub(crate) fn resize_node<'core>(
     matrix_in_s: Option<&'static str>,
 ) -> Result<Node<'core>, DecoderError> {
     let api = API::get()
-        .ok_or(DecoderError::VapoursynthInternalError {
+        .ok_or_else(|| DecoderError::VapoursynthInternalError {
             cause: "Failed to get VapourSynth API".to_owned(),
         })
         .unwrap();

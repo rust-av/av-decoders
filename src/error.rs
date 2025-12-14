@@ -24,9 +24,9 @@ pub enum DecoderError {
         cause: String,
     },
 
-    /// Error in the VapourSynth script execution.
+    /// Error in the `VapourSynth` script execution.
     ///
-    /// This error is returned when there's a problem with the VapourSynth script itself,
+    /// This error is returned when there's a problem with the `VapourSynth` script itself,
     /// such as syntax errors, invalid filter chains, or script logic issues.
     /// Only available when the `vapoursynth` feature is enabled.
     #[cfg(feature = "vapoursynth")]
@@ -36,10 +36,10 @@ pub enum DecoderError {
         cause: String,
     },
 
-    /// Internal VapourSynth error.
+    /// Internal `VapourSynth` error.
     ///
-    /// This represents errors that occur within the VapourSynth core or plugins,
-    /// typically indicating issues with the VapourSynth installation or environment.
+    /// This represents errors that occur within the `VapourSynth` core or plugins,
+    /// typically indicating issues with the `VapourSynth` installation or environment.
     /// Only available when the `vapoursynth` feature is enabled.
     #[cfg(feature = "vapoursynth")]
     #[error("Vapoursynth internal error ({cause})")]
@@ -104,7 +104,9 @@ pub enum DecoderError {
     /// This occurs when none of the available decoders can handle the input format.
     /// Consider enabling additional features like `ffmpeg` or `vapoursynth` to
     /// support more video formats.
-    #[error("no decoder found which can decode this file--perhaps you need to enable the ffmpeg or vapoursynth feature")]
+    #[error(
+        "no decoder found which can decode this file--perhaps you need to enable the ffmpeg or vapoursynth feature"
+    )]
     NoDecoder,
 
     /// The current decoder does not support the function which is being called.

@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
+#![allow(clippy::mod_module_files)]
 
 mod helpers;
 
@@ -8,7 +9,7 @@ use av_decoders::FfmpegDecoder;
 #[cfg(feature = "vapoursynth")]
 use av_decoders::VapoursynthDecoder;
 use av_decoders::{Decoder, Y4mDecoder};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 #[cfg(feature = "vapoursynth")]
 use std::collections::HashMap;
 use std::{
@@ -43,7 +44,7 @@ fn y4m_benchmark(c: &mut Criterion) {
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::PerIteration,
-        )
+        );
     });
 }
 
@@ -66,7 +67,7 @@ fn y4m_hbd_benchmark(c: &mut Criterion) {
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::PerIteration,
-        )
+        );
     });
 }
 
@@ -103,7 +104,7 @@ clip.set_output(0)
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::PerIteration,
-        )
+        );
     });
 }
 
@@ -165,7 +166,7 @@ clip.set_output(0)
                 assert_eq!(total_read_frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::LargeInput,
-        )
+        );
     });
 }
 
@@ -206,7 +207,7 @@ clip.set_output(0)
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::LargeInput,
-        )
+        );
     });
 }
 
@@ -290,7 +291,7 @@ clip.set_output(0)
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::LargeInput,
-        )
+        );
     });
 }
 
@@ -350,7 +351,7 @@ fn vapoursynth_empty_benchmark(c: &mut Criterion) {
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::LargeInput,
-        )
+        );
     });
 }
 
@@ -390,7 +391,7 @@ clip.set_output(0)
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::PerIteration,
-        )
+        );
     });
 }
 
@@ -418,7 +419,7 @@ fn ffmpeg_benchmark(c: &mut Criterion) {
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::PerIteration,
-        )
+        );
     });
 }
 
@@ -440,7 +441,7 @@ fn ffmpeg_hbd_benchmark(c: &mut Criterion) {
                 assert_eq!(frames, EXPECTED_FRAMECOUNT);
             },
             criterion::BatchSize::PerIteration,
-        )
+        );
     });
 }
 
