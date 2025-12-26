@@ -203,7 +203,7 @@ impl Ffms2Decoder {
             }
         })?;
 
-        let idx_path = format!("{}.ffidx", input.to_string_lossy());
+        let idx_path = format!("{}.ffindex", input.to_string_lossy());
         let idx_cstr =
             CString::new(idx_path.as_str()).map_err(|e| DecoderError::FileReadError {
                 cause: e.to_string(),
