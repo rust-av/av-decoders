@@ -109,7 +109,7 @@ pub(crate) fn import_lsmash<'core>(
             cause: error_message(),
         })
         .unwrap()
-        .get_node("clip")
+        .get_video_node("clip")
         .map_err(|_| DecoderError::VapoursynthInternalError {
             cause: error_message(),
         })
@@ -183,7 +183,7 @@ pub(crate) fn resize_node<'core>(
             cause: error_message(),
         })
         .unwrap()
-        .get_node("clip")
+        .get_video_node("clip")
         .map_err(|_| DecoderError::VapoursynthInternalError {
             cause: error_message(),
         })
