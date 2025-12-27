@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 0.7.0
+
+- fix!: update compatibility with Vapoursynth R73
+- fix: use correct naming convention for ffms2 index files
+
 ## Version 0.6.6
 
 - feat: add `luma_only` option to only return luma planes, may help perf for some applications
