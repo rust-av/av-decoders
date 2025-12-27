@@ -96,9 +96,12 @@ impl VapoursynthDecoder {
             vapoursynth::vsscript::Error::NoSuchVariable
             | vapoursynth::vsscript::Error::NoCore
             | vapoursynth::vsscript::Error::NoOutput
-            | vapoursynth::vsscript::Error::NoAPI => DecoderError::VapoursynthInternalError {
-                cause: e.to_string(),
-            },
+            | vapoursynth::vsscript::Error::NoAPI
+            | vapoursynth::vsscript::Error::ScriptCreationFailed => {
+                DecoderError::VapoursynthInternalError {
+                    cause: e.to_string(),
+                }
+            }
         })?;
         Ok(Self {
             env,
@@ -203,9 +206,12 @@ impl VapoursynthDecoder {
                 vapoursynth::vsscript::Error::NoSuchVariable
                 | vapoursynth::vsscript::Error::NoCore
                 | vapoursynth::vsscript::Error::NoOutput
-                | vapoursynth::vsscript::Error::NoAPI => DecoderError::VapoursynthInternalError {
-                    cause: e.to_string(),
-                },
+                | vapoursynth::vsscript::Error::NoAPI
+                | vapoursynth::vsscript::Error::ScriptCreationFailed => {
+                    DecoderError::VapoursynthInternalError {
+                        cause: e.to_string(),
+                    }
+                }
             })?;
         Ok(decoder)
     }
@@ -315,9 +321,12 @@ impl VapoursynthDecoder {
             vapoursynth::vsscript::Error::NoSuchVariable
             | vapoursynth::vsscript::Error::NoCore
             | vapoursynth::vsscript::Error::NoOutput
-            | vapoursynth::vsscript::Error::NoAPI => DecoderError::VapoursynthInternalError {
-                cause: e.to_string(),
-            },
+            | vapoursynth::vsscript::Error::NoAPI
+            | vapoursynth::vsscript::Error::ScriptCreationFailed => {
+                DecoderError::VapoursynthInternalError {
+                    cause: e.to_string(),
+                }
+            }
         })?;
         Ok(decoder)
     }
@@ -623,9 +632,6 @@ impl VapoursynthDecoder {
 /// Get the number of frames from a Vapoursynth `VideoInfo` struct.
 fn get_num_frames(info: VideoInfo) -> Result<TotalFrames, DecoderError> {
     let num_frames = {
-        if Property::Variable == info.format {
-            return Err(DecoderError::VariableFormat);
-        }
         if Property::Variable == info.resolution {
             return Err(DecoderError::VariableResolution);
         }
@@ -645,14 +651,7 @@ fn get_num_frames(info: VideoInfo) -> Result<TotalFrames, DecoderError> {
 
 /// Get the bit depth from a Vapoursynth `VideoInfo` struct.
 fn get_bit_depth(info: VideoInfo) -> Result<BitDepth, DecoderError> {
-    let bits_per_sample = {
-        match info.format {
-            Property::Variable => {
-                return Err(DecoderError::VariableFormat);
-            }
-            Property::Constant(x) => x.bits_per_sample(),
-        }
-    };
+    let bits_per_sample = info.format.bits_per_sample();
 
     Ok(bits_per_sample as usize)
 }
@@ -684,26 +683,24 @@ fn get_frame_rate(info: VideoInfo) -> Result<Rational32, DecoderError> {
 
 /// Get the chroma sampling from a Vapoursynth `VideoInfo` struct.
 fn get_chroma_sampling(info: VideoInfo) -> Result<ChromaSampling, DecoderError> {
-    match info.format {
-        Property::Variable => Err(DecoderError::VariableFormat),
-        Property::Constant(x) => match x.color_family() {
-            vapoursynth::format::ColorFamily::YUV => {
-                let ss = (x.sub_sampling_w(), x.sub_sampling_h());
-                match ss {
-                    (1, 1) => Ok(ChromaSampling::Cs420),
-                    (1, 0) => Ok(ChromaSampling::Cs422),
-                    (0, 0) => Ok(ChromaSampling::Cs444),
-                    (x, y) => Err(DecoderError::UnsupportedChromaSubsampling {
-                        x: x.into(),
-                        y: y.into(),
-                    }),
-                }
+    let format = info.format;
+    match format.color_family() {
+        vapoursynth::format::ColorFamily::YUV => {
+            let ss = (format.sub_sampling_w(), format.sub_sampling_h());
+            match ss {
+                (1, 1) => Ok(ChromaSampling::Cs420),
+                (1, 0) => Ok(ChromaSampling::Cs422),
+                (0, 0) => Ok(ChromaSampling::Cs444),
+                (x, y) => Err(DecoderError::UnsupportedChromaSubsampling {
+                    x: x.into(),
+                    y: y.into(),
+                }),
             }
-            vapoursynth::format::ColorFamily::Gray => Ok(ChromaSampling::Cs400),
-            fmt => Err(DecoderError::UnsupportedFormat {
-                fmt: fmt.to_string(),
-            }),
-        },
+        }
+        vapoursynth::format::ColorFamily::Gray => Ok(ChromaSampling::Cs400),
+        fmt => Err(DecoderError::UnsupportedFormat {
+            fmt: fmt.to_string(),
+        }),
     }
 }
 
