@@ -398,7 +398,7 @@ impl Ffms2Decoder {
         .luma_padding_right(LUMA_PADDING)
         .build()
         .map_err(|e| DecoderError::GenericDecodeError {
-            cause: e.to_string(),
+            cause: format!("Failed to build frame struct: {e}"),
         })?;
 
         // SAFETY: we assume that the values provided by VapourSynth are correct
@@ -413,7 +413,7 @@ impl Ffms2Decoder {
             )
         }
         .map_err(|e| DecoderError::GenericDecodeError {
-            cause: e.to_string(),
+            cause: format!("Failed to copy Y-plane data: {e}"),
         })?;
         if let Some(u_plane) = frame.u_plane.as_mut() {
             // SAFETY: we assume that the values provided by VapourSynth are correct
@@ -428,7 +428,7 @@ impl Ffms2Decoder {
                 )
             }
             .map_err(|e| DecoderError::GenericDecodeError {
-                cause: e.to_string(),
+                cause: format!("Failed to copy U-plane data: {e}"),
             })?;
         }
         if let Some(v_plane) = frame.v_plane.as_mut() {
@@ -444,7 +444,7 @@ impl Ffms2Decoder {
                 )
             }
             .map_err(|e| DecoderError::GenericDecodeError {
-                cause: e.to_string(),
+                cause: format!("Failed to copy V-plane data: {e}"),
             })?;
         }
 
