@@ -401,7 +401,7 @@ impl Ffms2Decoder {
             cause: format!("Failed to build frame struct: {e}"),
         })?;
 
-        // SAFETY: we assume that the values provided by VapourSynth are correct
+        // SAFETY: we assume that the values provided by FFMS2 are correct
         unsafe {
             frame.y_plane.copy_from_u8_slice_with_stride(
                 slice::from_raw_parts(
@@ -416,12 +416,18 @@ impl Ffms2Decoder {
             cause: format!("Failed to copy Y-plane data: {e}"),
         })?;
         if let Some(u_plane) = frame.u_plane.as_mut() {
-            // SAFETY: we assume that the values provided by VapourSynth are correct
+            // SAFETY: we assume that the values provided by FFMS2 are correct
             unsafe {
                 u_plane.copy_from_u8_slice_with_stride(
                     slice::from_raw_parts(
                         (*raw_frame).Data[1],
-                        (*raw_frame).Linesize[1] as usize * self.video_details.height,
+                        (*raw_frame).Linesize[1] as usize * self.video_details.height
+                            / self
+                                .video_details
+                                .chroma_sampling
+                                .subsample_ratio()
+                                .map(|(_x, y)| y.get())
+                                .unwrap_or(1) as usize,
                     ),
                     NonZeroUsize::new((*raw_frame).Linesize[1] as usize)
                         .expect("zero stride should be impossible"),
@@ -432,12 +438,18 @@ impl Ffms2Decoder {
             })?;
         }
         if let Some(v_plane) = frame.v_plane.as_mut() {
-            // SAFETY: we assume that the values provided by VapourSynth are correct
+            // SAFETY: we assume that the values provided by FFMS2 are correct
             unsafe {
                 v_plane.copy_from_u8_slice_with_stride(
                     slice::from_raw_parts(
                         (*raw_frame).Data[2],
-                        (*raw_frame).Linesize[2] as usize * self.video_details.height,
+                        (*raw_frame).Linesize[2] as usize * self.video_details.height
+                            / self
+                                .video_details
+                                .chroma_sampling
+                                .subsample_ratio()
+                                .map(|(_x, y)| y.get())
+                                .unwrap_or(1) as usize,
                     ),
                     NonZeroUsize::new((*raw_frame).Linesize[2] as usize)
                         .expect("zero stride should be impossible"),
