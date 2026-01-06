@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 0.8.1
+
+- fix: fix ffms2 loading of chroma planes
+- fix: improve error messages
+
 ## Version 0.8.0
 
 - chore!: update to `v_frame` 0.4
