@@ -1,11 +1,16 @@
 # Changelog
 
-## Version 0.8.1
+## Version 0.8.2
+
+- chore: bump v_frame to 0.5
+- fix: fix broken behaviors in HBD decoding
+
+## Version 0.8.1 [yanked]
 
 - fix: fix ffms2 loading of chroma planes
 - fix: improve error messages
 
-## Version 0.8.0
+## Version 0.8.0 [yanked]
 
 - chore!: update to `v_frame` 0.4
 

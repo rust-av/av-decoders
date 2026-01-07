@@ -1,6 +1,6 @@
 [package]
 name = "av-decoders"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Decoders for use in the rust-av ecosystem"
@@ -16,7 +16,7 @@ ffmpeg-the-third = { version = "4.0.1", optional = true, default-features = fals
 ffms2-sys = { version = "0.3.0", optional = true }
 num-rational = "0.4.2"
 thiserror = "2.0.17"
-v_frame = "0.4"
+v_frame = "0.5"
 vapoursynth = { version = "0.5", optional = true }
 y4m = "0.8"
 

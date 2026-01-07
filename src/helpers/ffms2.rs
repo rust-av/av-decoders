@@ -401,6 +401,12 @@ impl Ffms2Decoder {
             cause: format!("Failed to build frame struct: {e}"),
         })?;
 
+        let chroma_height = self.video_details.height
+            / self
+                .video_details
+                .chroma_sampling
+                .subsample_ratio()
+                .map_or(1, |(_x, y)| y.get()) as usize;
         // SAFETY: we assume that the values provided by FFMS2 are correct
         unsafe {
             frame.y_plane.copy_from_u8_slice_with_stride(
@@ -421,13 +427,7 @@ impl Ffms2Decoder {
                 u_plane.copy_from_u8_slice_with_stride(
                     slice::from_raw_parts(
                         (*raw_frame).Data[1],
-                        (*raw_frame).Linesize[1] as usize * self.video_details.height
-                            / self
-                                .video_details
-                                .chroma_sampling
-                                .subsample_ratio()
-                                .map(|(_x, y)| y.get())
-                                .unwrap_or(1) as usize,
+                        (*raw_frame).Linesize[1] as usize * chroma_height,
                     ),
                     NonZeroUsize::new((*raw_frame).Linesize[1] as usize)
                         .expect("zero stride should be impossible"),
@@ -443,13 +443,7 @@ impl Ffms2Decoder {
                 v_plane.copy_from_u8_slice_with_stride(
                     slice::from_raw_parts(
                         (*raw_frame).Data[2],
-                        (*raw_frame).Linesize[2] as usize * self.video_details.height
-                            / self
-                                .video_details
-                                .chroma_sampling
-                                .subsample_ratio()
-                                .map(|(_x, y)| y.get())
-                                .unwrap_or(1) as usize,
+                        (*raw_frame).Linesize[2] as usize * chroma_height,
                     ),
                     NonZeroUsize::new((*raw_frame).Linesize[2] as usize)
                         .expect("zero stride should be impossible"),
