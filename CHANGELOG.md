@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.9.0
+
+- feat!: change the ffms2 `set_output_format` function to take `ChromaSubsampling`, this allows converting to grayscale
+
 ## Version 0.8.2
 
 - chore: bump v_frame to 0.5

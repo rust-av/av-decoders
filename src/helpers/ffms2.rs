@@ -174,7 +174,7 @@ impl Ffms2Decoder {
         width: usize,
         height: usize,
         bit_depth: u8,
-        chroma_subsampling: (u8, u8),
+        chroma_subsampling: ChromaSubsampling,
     ) -> Result<(), DecoderError> {
         // SAFETY: we free this on all branches below
         let mut err = unsafe { empty_error_info() };
@@ -588,32 +588,33 @@ fn pixel_format_to_video_info(pix_fmt: i32) -> Result<(usize, ChromaSubsampling)
 
 fn video_info_to_pixel_format(
     bit_depth: u8,
-    chroma_subsampling: (u8, u8),
+    chroma_subsampling: ChromaSubsampling,
 ) -> Result<i32, DecoderError> {
-    Ok(
-        match (bit_depth, chroma_subsampling.0 + chroma_subsampling.1) {
-            // 8-bit formats
-            (8, 2) => *AV_PIX_FMT_YUV420P,
-            (8, 1) => *AV_PIX_FMT_YUV422P,
-            (8, 0) => *AV_PIX_FMT_YUV444P,
+    Ok(match (bit_depth, chroma_subsampling) {
+        // 8-bit formats
+        (8, ChromaSubsampling::Yuv420) => *AV_PIX_FMT_YUV420P,
+        (8, ChromaSubsampling::Yuv422) => *AV_PIX_FMT_YUV422P,
+        (8, ChromaSubsampling::Yuv444) => *AV_PIX_FMT_YUV444P,
+        (8, ChromaSubsampling::Monochrome) => *AV_PIX_FMT_GRAY8,
 
-            // 10-bit formats
-            (10, 2) => *AV_PIX_FMT_YUV420P10LE,
-            (10, 1) => *AV_PIX_FMT_YUV422P10LE,
-            (10, 0) => *AV_PIX_FMT_YUV444P10LE,
+        // 10-bit formats
+        (10, ChromaSubsampling::Yuv420) => *AV_PIX_FMT_YUV420P10LE,
+        (10, ChromaSubsampling::Yuv422) => *AV_PIX_FMT_YUV422P10LE,
+        (10, ChromaSubsampling::Yuv444) => *AV_PIX_FMT_YUV444P10LE,
+        (10, ChromaSubsampling::Monochrome) => *AV_PIX_FMT_GRAY10LE,
 
-            // 12-bit formats
-            (12, 2) => *AV_PIX_FMT_YUV420P12LE,
-            (12, 1) => *AV_PIX_FMT_YUV422P12LE,
-            (12, 0) => *AV_PIX_FMT_YUV444P12LE,
+        // 12-bit formats
+        (12, ChromaSubsampling::Yuv420) => *AV_PIX_FMT_YUV420P12LE,
+        (12, ChromaSubsampling::Yuv422) => *AV_PIX_FMT_YUV422P12LE,
+        (12, ChromaSubsampling::Yuv444) => *AV_PIX_FMT_YUV444P12LE,
+        (12, ChromaSubsampling::Monochrome) => *AV_PIX_FMT_GRAY12LE,
 
-            _ => {
-                return Err(DecoderError::UnsupportedFormat {
-                    fmt: "Unsupported bit depth and subsampling combination".to_string(),
-                });
-            }
-        },
-    )
+        _ => {
+            return Err(DecoderError::UnsupportedFormat {
+                fmt: "Unsupported bit depth and subsampling combination".to_string(),
+            });
+        }
+    })
 }
 
 const ERR_BUFFER_SIZE: usize = 1024;
