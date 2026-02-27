@@ -945,6 +945,48 @@ clip.set_output()
             _ => Err(DecoderError::UnsupportedDecoder),
         }
     }
+
+    /// Returns a references to the underlying ffmpeg decoder, or `None` if this is nof
+    /// an ffmpeg decoder implementation.
+    ///
+    /// This may be useful for lower-level manipulation that is not accessible through
+    /// the higher-level abstracted interface.
+    #[inline]
+    #[cfg(feature = "ffmpeg")]
+    pub fn get_ffmpeg_impl(&mut self) -> Option<&mut FfmpegDecoder> {
+        match &mut self.decoder {
+            DecoderImpl::Ffmpeg(dec) => Some(dec),
+            _ => None,
+        }
+    }
+
+    /// Returns a references to the underlying ffmpeg decoder, or `None` if this is nof
+    /// an ffmpeg decoder implementation.
+    ///
+    /// This may be useful for lower-level manipulation that is not accessible through
+    /// the higher-level abstracted interface.
+    #[inline]
+    #[cfg(feature = "ffms2")]
+    pub fn get_ffms2_impl(&mut self) -> Option<&mut Ffms2Decoder> {
+        match &mut self.decoder {
+            DecoderImpl::Ffms2(dec) => Some(dec),
+            _ => None,
+        }
+    }
+
+    /// Returns a references to the underlying ffmpeg decoder, or `None` if this is nof
+    /// an ffmpeg decoder implementation.
+    ///
+    /// This may be useful for lower-level manipulation that is not accessible through
+    /// the higher-level abstracted interface.
+    #[inline]
+    #[cfg(feature = "vapoursynth")]
+    pub fn get_vapoursynth_impl(&mut self) -> Option<&mut VapoursynthDecoder> {
+        match &mut self.decoder {
+            DecoderImpl::Vapoursynth(dec) => Some(dec),
+            _ => None,
+        }
+    }
 }
 
 /// Internal enum representing different decoder backend implementations.

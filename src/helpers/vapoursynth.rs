@@ -61,7 +61,8 @@ pub type VariableValue = String;
 
 /// An interface that is used for decoding a video stream using Vapoursynth
 pub struct VapoursynthDecoder {
-    env: Environment,
+    #[allow(missing_docs)]
+    pub env: Environment,
     modify_node: Option<ModifyNode>,
     video_details: Option<VideoDetails>,
 }

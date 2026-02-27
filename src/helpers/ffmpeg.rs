@@ -27,9 +27,12 @@ use crate::{LUMA_PADDING, VideoDetails, error::DecoderError};
 /// There have been desync issue reported with this decoder
 /// on some video files. Use at your own risk!
 pub struct FfmpegDecoder {
-    input_ctx: context::Input,
-    decoder: decoder::Video,
-    pub(crate) video_details: VideoDetails,
+    #[allow(missing_docs)]
+    pub input_ctx: context::Input,
+    #[allow(missing_docs)]
+    pub decoder: decoder::Video,
+    #[allow(missing_docs)]
+    pub video_details: VideoDetails,
     stream_index: usize,
     end_of_stream: bool,
     eof_sent: bool,

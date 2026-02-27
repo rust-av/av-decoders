@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.9.1
+
+- feat: add `Decoder::get_*_impl` methods
+
 ## Version 0.9.0
 
 - feat!: change the ffms2 `set_output_format` function to take `ChromaSubsampling`, this allows converting to grayscale

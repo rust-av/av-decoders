@@ -43,7 +43,8 @@ static FFMS2_INIT: Once = Once::new();
 pub struct Ffms2Decoder {
     /// Contains the resolution and bit depth of the loaded video stream
     pub video_details: VideoDetails,
-    video_source: *mut FFMS_VideoSource,
+    #[allow(missing_docs)]
+    pub video_source: *mut FFMS_VideoSource,
     #[expect(dead_code, reason = "Keep alive until drop")]
     index_handle: FfmsIndex,
 }
