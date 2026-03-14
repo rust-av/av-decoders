@@ -85,14 +85,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
                 Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+                    VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
                 )))
                 .unwrap()
             },
@@ -122,7 +122,7 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let initial_decoder = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(
-            black_box(VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap()),
+            black_box(VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap()),
         ))
         .unwrap();
         let initial_details = initial_decoder.get_video_details();
@@ -135,7 +135,7 @@ clip.set_output(0)
                 for i in 0..SIMULTANEOUS_DECODERS {
                     let decoder = Decoder::from_decoder_impl(
                         av_decoders::DecoderImpl::Vapoursynth(black_box(
-                            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+                            VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
                         )),
                     )
                     .unwrap();
@@ -188,14 +188,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
                 Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+                    VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
                 )))
                 .unwrap()
             },
@@ -228,14 +228,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
                 let mut vapoursynth_decoder =
-                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap();
+                    VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap();
                 vapoursynth_decoder
                     .register_node_modifier(Box::new(move |core, node| {
                         // Node is expected to exist
@@ -372,14 +372,14 @@ clip.set_output(0)
         );
         // Create the decoder once to build the index file
         let _ = Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-            VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+            VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
         )))
         .unwrap();
 
         b.iter_batched(
             || {
                 Decoder::from_decoder_impl(av_decoders::DecoderImpl::Vapoursynth(black_box(
-                    VapoursynthDecoder::from_script(&script, HashMap::new()).unwrap(),
+                    VapoursynthDecoder::from_script(&script, HashMap::new(), None).unwrap(),
                 )))
                 .unwrap()
             },
