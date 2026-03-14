@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.10.0
+
+- feat!: add `output_index` option to `VapoursynthDecoder::from_file` and `VapoursynthDecoder::from_script`, this allows specifying which output node to decode
+
 ## Version 0.9.1
 
 - feat: add `Decoder::get_*_impl` methods

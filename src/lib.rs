@@ -238,7 +238,7 @@ impl Decoder {
             if ext == "vpy" {
                 // Decode vapoursynth script file input
                 let decoder =
-                    DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input, HashMap::new())?);
+                    DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input, HashMap::new(), None)?);
                 let video_details = decoder.video_details()?;
                 return Ok(Decoder {
                     decoder,
@@ -297,7 +297,7 @@ clip.set_output()
                 )
             );
             let decoder =
-                DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script, HashMap::new())?);
+                DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script, HashMap::new(), None)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
@@ -432,7 +432,7 @@ clip.set_output()
         script: &str,
         variables: HashMap<VariableName, VariableValue>,
     ) -> Result<Decoder, DecoderError> {
-        let dec = VapoursynthDecoder::from_script(script, variables)?;
+        let dec = VapoursynthDecoder::from_script(script, variables, None)?;
         let decoder = DecoderImpl::Vapoursynth(dec);
         let video_details = decoder.video_details()?;
         Ok(Decoder {
