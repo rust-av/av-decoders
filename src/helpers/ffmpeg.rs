@@ -105,7 +105,7 @@ impl FfmpegDecoder {
             cause: e.to_string(),
         })?;
 
-        let input_ctx = format::input(&input).map_err(|e| DecoderError::FileReadError {
+        let input_ctx = format::input(input.as_ref()).map_err(|e| DecoderError::FileReadError {
             cause: e.to_string(),
         })?;
         let input = input_ctx

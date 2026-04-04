@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.10.0
+
+- feat!: upgrade `ffmpeg-the-third` for FFMpeg 8.1 compatibility
+
 ## Version 0.9.1
 
 - feat: add `Decoder::get_*_impl` methods
