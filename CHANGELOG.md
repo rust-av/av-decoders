@@ -1,8 +1,15 @@
 # Changelog
 
-## Version 0.10.0
+## Version 0.11.0
 
 - feat!: add `output_index` option to `VapoursynthDecoder::from_file` and `VapoursynthDecoder::from_script`, this allows specifying which output node to decode
+- feat!: add `get_vapoursynth` function to get the VapourSynth Environment and Node at the same time.
+- feat!: make `modify_node` callback public, this allows updating the modifier after instantiating `VapoursynthDecoder`.
+
+
+## Version 0.10.0
+
+- feat!: upgrade `ffmpeg-the-third` for FFMpeg 8.1 compatibility
 
 ## Version 0.9.1
 
