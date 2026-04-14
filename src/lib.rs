@@ -237,8 +237,11 @@ impl Decoder {
             #[cfg(feature = "vapoursynth")]
             if ext == "vpy" {
                 // Decode vapoursynth script file input
-                let decoder =
-                    DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(input, HashMap::new(), None)?);
+                let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_file(
+                    input,
+                    HashMap::new(),
+                    None,
+                )?);
                 let video_details = decoder.video_details()?;
                 return Ok(Decoder {
                     decoder,
@@ -296,8 +299,11 @@ clip.set_output()
                         .to_string_lossy()
                 )
             );
-            let decoder =
-                DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(&script, HashMap::new(), None)?);
+            let decoder = DecoderImpl::Vapoursynth(VapoursynthDecoder::from_script(
+                &script,
+                HashMap::new(),
+                None,
+            )?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
@@ -942,6 +948,98 @@ clip.set_output()
     pub fn get_vapoursynth_node(&self) -> Result<Node<'_>, DecoderError> {
         match self.decoder {
             DecoderImpl::Vapoursynth(ref dec) => Ok(dec.get_output_node()),
+            _ => Err(DecoderError::UnsupportedDecoder),
+        }
+    }
+
+    /// Returns the VapourSynth Environment and video node representing the decoded video stream.
+    ///
+    /// This method provides access to the underlying VapourSynth `Node` that represents
+    /// the video source and the `Environment`. The node can be used for advanced VapourSynth operations,
+    /// creating additional processing pipelines, or integrating with other VapourSynth
+    /// workflows and tools.
+    ///
+    /// VapourSynth nodes are the fundamental building blocks of video processing
+    /// pipelines and can be used to:
+    /// - Apply additional filters and transformations
+    /// - Create branched processing pipelines
+    /// - Extract frame metadata and properties
+    /// - Implement custom frame processing logic
+    /// - Interface with other VapourSynth-based applications
+    ///
+    /// # Requirements
+    ///
+    /// This method is only available when:
+    /// - The `vapoursynth` feature is enabled
+    /// - The decoder is using the VapourSynth backend (created via `from_file()` with
+    ///   VapourSynth available, or via `from_script()`)
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok((Environment, Node))` - The VapourSynth environment and node representing the video stream
+    /// - `Err(DecoderError::UnsupportedDecoder)` - If the current decoder is not using VapourSynth
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - The decoder was not initialized with VapourSynth (e.g., using Y4M or FFmpeg backend)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::Decoder;
+    ///
+    /// let decoder = Decoder::from_file("video.mkv")?;
+    ///
+    /// // Get the VapourSynth node for advanced processing
+    /// if let Ok((env, node)) = decoder.get_vapoursynth_node() {
+    ///     // You can now use this environment and node for additional VapourSynth operations
+    ///     // Note: This example shows the concept - actual usage would depend
+    ///     // on specific VapourSynth operations you want to perform
+    ///
+    ///     println!("Got VapourSynth environment and node");
+    ///
+    ///     // Example: You could apply additional filters to this node
+    ///     // let filtered_node = apply_custom_filter(node);
+    ///
+    ///     // Or use it to create a new processing pipeline
+    ///     // let output_node = create_processing_pipeline(node);
+    /// 
+    ///     // You can also use the environment to create another node
+    ///     // let second_node = create_new_node(env);
+    ///     // compare_nodes(node, second_node);
+    /// }
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    ///
+    /// ## Advanced Usage
+    ///
+    /// ```no_run
+    /// # use av_decoders::Decoder;
+    /// # use std::collections::HashMap;
+    /// // Create a decoder from a script
+    /// let script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    /// clip = core.ffms2.Source("input.mkv")
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let decoder = Decoder::from_script(script, HashMap::new())?;
+    ///
+    /// // Get the node and use it for further processing
+    /// let (env, node) = decoder.get_vapoursynth_node()?;
+    ///
+    /// // Now you can integrate this node into larger VapourSynth workflows
+    /// // or apply additional processing that wasn't included in the original script
+    /// # Ok::<(), av_decoders::DecoderError>(())
+    /// ```
+    #[inline]
+    #[cfg(feature = "vapoursynth")]
+    pub fn get_vapoursynth(&self) -> Result<(&Environment, Node<'_>), DecoderError> {
+        match self.decoder {
+            DecoderImpl::Vapoursynth(ref dec) => Ok((dec.get_environment(), dec.get_output_node())),
             _ => Err(DecoderError::UnsupportedDecoder),
         }
     }

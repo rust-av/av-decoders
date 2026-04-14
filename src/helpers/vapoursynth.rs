@@ -63,7 +63,8 @@ pub type VariableValue = String;
 pub struct VapoursynthDecoder {
     #[allow(missing_docs)]
     pub env: Environment,
-    modify_node: Option<ModifyNode>,
+    #[allow(missing_docs)]
+    pub modify_node: Option<ModifyNode>,
     video_details: Option<VideoDetails>,
     output_index: i32,
 }
@@ -572,6 +573,18 @@ impl VapoursynthDecoder {
         }
 
         Ok(frame)
+    }
+
+    /// Get the VapourSynth environment.
+    ///
+    /// This function returns an immutable reference to the
+    /// VapourSynth environment created during initialization.
+    ///
+    /// # Returns
+    ///
+    /// Returns `&vapoursynth::vsscript::Environment`.
+    pub(crate) fn get_environment(&self) -> &Environment {
+        &self.env
     }
 
     /// Get the VapourSynth environment.
