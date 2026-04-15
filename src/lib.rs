@@ -1005,7 +1005,7 @@ clip.set_output()
     ///
     ///     // Or use it to create a new processing pipeline
     ///     // let output_node = create_processing_pipeline(node);
-    /// 
+    ///
     ///     // You can also use the environment to create another node
     ///     // let second_node = create_new_node(env);
     ///     // compare_nodes(node, second_node);
