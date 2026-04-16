@@ -128,7 +128,7 @@ impl Ffms2Decoder {
                 index_handle.track,
                 index_handle.idx_handle,
                 threads,
-                0,
+                1,
                 std::ptr::addr_of_mut!(err),
             )
         };

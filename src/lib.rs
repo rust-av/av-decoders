@@ -858,13 +858,25 @@ clip.set_output()
     /// }
     /// ```
     #[inline]
-    #[cfg(feature = "vapoursynth")]
+    #[cfg(any(feature = "vapoursynth", feature = "ffms2"))]
     pub fn seek_to_frame(&mut self, frame_index: usize) -> Result<(), DecoderError> {
         match &self.decoder {
+            #[cfg(feature = "vapoursynth")]
             DecoderImpl::Vapoursynth(_) => {
                 if self
-                    .decoder
-                    .video_details()?
+                    .video_details
+                    .total_frames
+                    .is_some_and(|total_frames| frame_index > total_frames)
+                {
+                    return Err(DecoderError::EndOfFile);
+                }
+                self.frames_read = frame_index;
+                Ok(())
+            }
+            #[cfg(feature = "ffms2")]
+            DecoderImpl::Ffms2(_) => {
+                if self
+                    .video_details
                     .total_frames
                     .is_some_and(|total_frames| frame_index > total_frames)
                 {
@@ -1233,7 +1245,7 @@ impl DecoderImpl {
         }
     }
 
-    #[cfg(feature = "vapoursynth")]
+    #[cfg(any(feature = "vapoursynth", feature = "ffms2"))]
     pub(crate) fn get_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
@@ -1243,6 +1255,8 @@ impl DecoderImpl {
         match self {
             #[cfg(feature = "vapoursynth")]
             Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index, luma_only),
+            #[cfg(feature = "ffms2")]
+            Self::Ffms2(dec) => dec.read_video_frame::<T>(frame_index, luma_only),
             _ => Err(DecoderError::UnsupportedDecoder),
         }
     }
