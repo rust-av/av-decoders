@@ -866,7 +866,7 @@ clip.set_output()
                 if self
                     .video_details
                     .total_frames
-                    .is_some_and(|total_frames| frame_index > total_frames)
+                    .is_some_and(|total_frames| frame_index >= total_frames)
                 {
                     return Err(DecoderError::EndOfFile);
                 }
@@ -878,7 +878,7 @@ clip.set_output()
                 if self
                     .video_details
                     .total_frames
-                    .is_some_and(|total_frames| frame_index > total_frames)
+                    .is_some_and(|total_frames| frame_index >= total_frames)
                 {
                     return Err(DecoderError::EndOfFile);
                 }
