@@ -805,6 +805,90 @@ clip.set_output()
         )
     }
 
+    /// Seeks to the specified video frame from the input. Useful for skipping frames to avoid decoding them.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing:
+    /// - `Ok(())`
+    /// - `Err(DecoderError)` - An error if the decoder does not support seeking
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if:
+    /// - End of file/stream is reached (`DecoderError::EndOfFile`)
+    /// - The decoder does not support seeking (`DecoderError::UnsupportedDecoder`)
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use av_decoders::Decoder;
+    /// use std::collections::HashMap;
+    ///
+    /// // Simple script that loads a video file
+    /// let script = r#"
+    /// import vapoursynth as vs
+    /// core = vs.core
+    ///
+    /// clip = core.ffms2.Source('input.mp4')
+    /// clip.set_output()
+    /// "#;
+    ///
+    /// let mut decoder = Decoder::from_script(script, HashMap::new()).unwrap();
+    /// let details = decoder.get_video_details();
+    ///
+    /// // Seek to the 42nd video frame
+    /// decoder.seek_to_frame(42).unwrap();
+    /// // Get the video frames after the 42nd
+    /// if details.bit_depth > 8 {
+    ///     while let Ok(frame) = decoder.read_video_frame::<u16>() {
+    ///         println!("Frame size: {}x{}",
+    ///             frame.y_plane.width(),
+    ///             frame.y_plane.height()
+    ///         );
+    ///         // Process frame data...
+    ///     }
+    /// } else {
+    ///     while let Ok(frame) = decoder.read_video_frame::<u8>() {
+    ///         println!("Frame size: {}x{}",
+    ///             frame.y_plane.width(),
+    ///             frame.y_plane.height()
+    ///         );
+    ///         // Process frame data...
+    ///     }
+    /// }
+    /// ```
+    #[inline]
+    #[cfg(any(feature = "vapoursynth", feature = "ffms2"))]
+    pub fn seek_to_frame(&mut self, frame_index: usize) -> Result<(), DecoderError> {
+        match &self.decoder {
+            #[cfg(feature = "vapoursynth")]
+            DecoderImpl::Vapoursynth(_) => {
+                if self
+                    .video_details
+                    .total_frames
+                    .is_some_and(|total_frames| frame_index >= total_frames)
+                {
+                    return Err(DecoderError::EndOfFile);
+                }
+                self.frames_read = frame_index;
+                Ok(())
+            }
+            #[cfg(feature = "ffms2")]
+            DecoderImpl::Ffms2(_) => {
+                if self
+                    .video_details
+                    .total_frames
+                    .is_some_and(|total_frames| frame_index >= total_frames)
+                {
+                    return Err(DecoderError::EndOfFile);
+                }
+                self.frames_read = frame_index;
+                Ok(())
+            }
+            _ => Err(DecoderError::UnsupportedDecoder),
+        }
+    }
+
     /// Returns a mutable reference to the VapourSynth environment.
     ///
     /// This method provides direct access to the VapourSynth environment when using
@@ -1161,7 +1245,7 @@ impl DecoderImpl {
         }
     }
 
-    #[cfg(feature = "vapoursynth")]
+    #[cfg(any(feature = "vapoursynth", feature = "ffms2"))]
     pub(crate) fn get_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
@@ -1171,6 +1255,8 @@ impl DecoderImpl {
         match self {
             #[cfg(feature = "vapoursynth")]
             Self::Vapoursynth(dec) => dec.read_video_frame::<T>(cfg, frame_index, luma_only),
+            #[cfg(feature = "ffms2")]
+            Self::Ffms2(dec) => dec.read_video_frame::<T>(frame_index, luma_only),
             _ => Err(DecoderError::UnsupportedDecoder),
         }
     }
