@@ -1,6 +1,6 @@
 [package]
 name = "av-decoders"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Decoders for use in the rust-av ecosystem"

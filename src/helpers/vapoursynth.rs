@@ -21,7 +21,7 @@ use vapoursynth::{
     vsscript::{Environment, EvalFlags},
 };
 
-const OUTPUT_INDEX: i32 = 0;
+const DEFAULT_OUTPUT_INDEX: i32 = 0;
 
 /// The type for the callback function used to modify the Vapoursynth node
 /// before it is used to decode frames. This allows the user to modify
@@ -63,15 +63,17 @@ pub type VariableValue = String;
 pub struct VapoursynthDecoder {
     #[allow(missing_docs)]
     pub env: Environment,
+    #[allow(missing_docs)]
     modify_node: Option<ModifyNode>,
     video_details: Option<VideoDetails>,
+    output_index: i32,
 }
 
 impl VapoursynthDecoder {
     /// Creates a new VapourSynth decoder from a new VapourSynth environment.
     ///
     /// This function creates a VapourSynth environment with no output. A valid output node
-    /// must be provided with the `register_node_modifier` function before the decodercan be used
+    /// must be provided with the `register_node_modifier` function before the decoder can be used
     /// to decode frames.
     ///
     /// # Returns
@@ -114,6 +116,7 @@ impl VapoursynthDecoder {
             env,
             modify_node: None,
             video_details: None,
+            output_index: DEFAULT_OUTPUT_INDEX,
         })
     }
 
@@ -131,6 +134,7 @@ impl VapoursynthDecoder {
     ///   containing the variable names and values to set. These will be passed to the
     ///   VapourSynth environment and can be accessed within the script using
     ///   `vs.get_output()` or similar mechanisms. Pass `HashMap::new()` if no variables are needed.
+    /// * `output_index` - The index of the output node to use for decoding. Defaults to 0.
     ///
     /// # Returns
     ///
@@ -165,12 +169,12 @@ impl VapoursynthDecoder {
     /// use std::collections::HashMap;
     ///
     /// // Load a VapourSynth script file
-    /// let decoder = VapoursynthDecoder::from_file("script.vpy", HashMap::new())?;
+    /// let decoder = VapoursynthDecoder::from_file("script.vpy", HashMap::new(), None)?;
     ///
     /// // Using PathBuf
     /// use std::path::PathBuf;
     /// let script_path = PathBuf::from("processing_script.vpy");
-    /// let decoder = VapoursynthDecoder::from_file(&script_path, HashMap::new())?;
+    /// let decoder = VapoursynthDecoder::from_file(&script_path, HashMap::new(), Some(1))?;
     /// # Ok::<(), av_decoders::DecoderError>(())
     /// ```
     ///
@@ -192,9 +196,13 @@ impl VapoursynthDecoder {
     pub fn from_file<P: AsRef<Path>>(
         input: P,
         variables: HashMap<VariableName, VariableValue>,
+        output_index: Option<u8>,
     ) -> Result<VapoursynthDecoder, DecoderError> {
         let mut decoder = Self::new()?;
         decoder.set_variables(variables)?;
+        if let Some(index) = output_index {
+            decoder.output_index = index as i32;
+        }
         decoder
             .get_env()
             .eval_file(input, EvalFlags::SetWorkingDir)
@@ -238,6 +246,8 @@ impl VapoursynthDecoder {
     ///   containing the variable names and values to set. These will be passed to the
     ///   VapourSynth environment and can be accessed within the script using
     ///   `vs.get_output()` or similar mechanisms. Pass `HashMap::new()` if no variables are needed.
+    /// * `output_index` - An optional `u8` value specifying the output node index in the script.
+    ///   Defaults to the first output node (`0`).
     ///
     /// # Returns
     ///
@@ -281,7 +291,7 @@ impl VapoursynthDecoder {
     /// clip.set_output()
     /// "#;
     ///
-    /// let decoder = VapoursynthDecoder::from_script(script, HashMap::new())?;
+    /// let decoder = VapoursynthDecoder::from_script(script, HashMap::new(), None)?;
     ///
     /// // More complex processing script
     /// let processing_script = r#"
@@ -292,15 +302,16 @@ impl VapoursynthDecoder {
     /// clip = core.ffms2.Source('raw_footage.mkv')
     ///
     /// # Apply denoising
-    /// clip = core.knlm.KNLMeansCL(clip, d=2, a=2, h=0.8)
+    /// processed_clip = core.knlm.KNLMeansCL(clip, d=2, a=2, h=0.8)
     ///
     /// # Resize to 1080p
-    /// clip = core.resize.Bicubic(clip, width=1920, height=1080)
+    /// processed_clip = core.resize.Bicubic(processed_clip, width=1920, height=1080)
     ///
     /// clip.set_output()
+    /// processed_clip.set_output(1)
     /// "#;
     ///
-    /// let decoder = VapoursynthDecoder::from_script(processing_script, HashMap::new())?;
+    /// let decoder = VapoursynthDecoder::from_script(processing_script, HashMap::new(), Some(1))?;
     /// # Ok::<(), av_decoders::DecoderError>(())
     /// ```
     ///
@@ -312,9 +323,13 @@ impl VapoursynthDecoder {
     pub fn from_script(
         script: &str,
         variables: HashMap<VariableName, VariableValue>,
+        output_index: Option<u8>,
     ) -> Result<VapoursynthDecoder, DecoderError> {
         let mut decoder = Self::new()?;
         decoder.set_variables(variables)?;
+        if let Some(index) = output_index {
+            decoder.output_index = index as i32;
+        }
         decoder.get_env().eval_script(script).map_err(|e| match e {
             vapoursynth::vsscript::Error::CStringConversion(_)
             | vapoursynth::vsscript::Error::FileOpen(_)
@@ -439,7 +454,7 @@ impl VapoursynthDecoder {
         }
 
         let node = {
-            let output_node = match self.env.get_output(OUTPUT_INDEX) {
+            let output_node = match self.env.get_output(self.output_index) {
                 Ok(output) => {
                     let (output_node, _) = output;
                     Some(output_node)
@@ -562,6 +577,18 @@ impl VapoursynthDecoder {
 
     /// Get the VapourSynth environment.
     ///
+    /// This function returns an immutable reference to the
+    /// VapourSynth environment created during initialization.
+    ///
+    /// # Returns
+    ///
+    /// Returns `&vapoursynth::vsscript::Environment`.
+    pub(crate) fn get_environment(&self) -> &Environment {
+        &self.env
+    }
+
+    /// Get the VapourSynth environment.
+    ///
     /// This function returns a mutable reference to the
     /// VapourSynth environment created during initialization.
     ///
@@ -584,7 +611,7 @@ impl VapoursynthDecoder {
     ///
     /// Returns `vapoursynth::vsscript::Node`.
     pub(crate) fn get_output_node(&self) -> Node<'_> {
-        let output_node = match self.env.get_output(OUTPUT_INDEX) {
+        let output_node = match self.env.get_output(self.output_index) {
             Ok(output) => {
                 let (output_node, _) = output;
                 Some(output_node)
@@ -649,7 +676,7 @@ impl VapoursynthDecoder {
             })?;
 
         let output_node = {
-            let res = self.env.get_output(OUTPUT_INDEX);
+            let res = self.env.get_output(self.output_index);
             match res {
                 Ok((node, _)) => Some(node),
                 Err(vapoursynth::vsscript::Error::NoOutput) => None,
