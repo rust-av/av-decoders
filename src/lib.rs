@@ -255,7 +255,7 @@ impl Decoder {
         // Ffms2 is the fastest and most reliable, use it if available.
         #[cfg(feature = "ffms2")]
         {
-            let decoder = DecoderImpl::Ffms2(Ffms2Decoder::new(input)?);
+            let decoder = DecoderImpl::Ffms2(Ffms2Decoder::new(input, None)?);
             let video_details = decoder.video_details()?;
             return Ok(Decoder {
                 decoder,
