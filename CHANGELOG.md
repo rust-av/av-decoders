@@ -5,7 +5,6 @@
 - feat!: add `output_index` option to `VapoursynthDecoder::from_file` and `VapoursynthDecoder::from_script`, this allows specifying which output node to decode
 - feat!: add `get_vapoursynth` function to get the VapourSynth Environment and Node at the same time.
 
-
 ## Version 0.10.0
 
 - feat!: upgrade `ffmpeg-the-third` for FFMpeg 8.1 compatibility
