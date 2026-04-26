@@ -64,7 +64,7 @@ pub struct VapoursynthDecoder {
     #[allow(missing_docs)]
     pub env: Environment,
     #[allow(missing_docs)]
-    pub modify_node: Option<ModifyNode>,
+    modify_node: Option<ModifyNode>,
     video_details: Option<VideoDetails>,
     output_index: i32,
 }
