@@ -299,6 +299,7 @@ impl Ffms2Decoder {
 
             let track = FFMS_GetTrackFromIndex(idx, track_index);
             if FFMS_GetTrackType(track) != (FFMS_TrackType::FFMS_TYPE_VIDEO as i32) {
+                free_error_info(&mut err);
                 return Err(DecoderError::NoVideoStream);
             }
 
