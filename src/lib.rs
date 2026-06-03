@@ -834,12 +834,12 @@ clip.set_output()
     /// "#;
     ///
     /// let mut decoder = Decoder::from_script(script, HashMap::new()).unwrap();
-    /// let details = decoder.get_video_details();
+    /// let bit_depth = decoder.get_video_details().bit_depth;
     ///
     /// // Seek to the 42nd video frame
     /// decoder.seek_to_frame(42).unwrap();
     /// // Get the video frames after the 42nd
-    /// if details.bit_depth > 8 {
+    /// if bit_depth > 8 {
     ///     while let Ok(frame) = decoder.read_video_frame::<u16>() {
     ///         println!("Frame size: {}x{}",
     ///             frame.y_plane.width(),
@@ -1077,7 +1077,7 @@ clip.set_output()
     /// let decoder = Decoder::from_file("video.mkv")?;
     ///
     /// // Get the VapourSynth node for advanced processing
-    /// if let Ok((env, node)) = decoder.get_vapoursynth_node() {
+    /// if let Ok((env, node)) = decoder.get_vapoursynth() {
     ///     // You can now use this environment and node for additional VapourSynth operations
     ///     // Note: This example shows the concept - actual usage would depend
     ///     // on specific VapourSynth operations you want to perform
@@ -1113,7 +1113,7 @@ clip.set_output()
     /// let decoder = Decoder::from_script(script, HashMap::new())?;
     ///
     /// // Get the node and use it for further processing
-    /// let (env, node) = decoder.get_vapoursynth_node()?;
+    /// let (env, node) = decoder.get_vapoursynth()?;
     ///
     /// // Now you can integrate this node into larger VapourSynth workflows
     /// // or apply additional processing that wasn't included in the original script
