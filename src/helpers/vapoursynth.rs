@@ -380,7 +380,11 @@ impl VapoursynthDecoder {
     /// use std::collections::HashMap;
     ///
     /// // Load a VapourSynth script file
-    /// let mut decoder = VapoursynthDecoder::from_file("script.vpy", HashMap::new()).unwrap();
+    /// let mut decoder = VapoursynthDecoder::from_file(
+    ///     "script.vpy",
+    ///     HashMap::new(),
+    ///     None
+    /// ).unwrap();
     ///
     /// let variables = HashMap::from([
     ///     ("message".to_string(), "fluffy kittens".to_string()),
