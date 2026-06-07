@@ -11,9 +11,9 @@ use std::{
 use ffms2_sys::{
     FFMS_CreateIndexer, FFMS_CreateVideoSource, FFMS_DestroyIndex, FFMS_DestroyVideoSource,
     FFMS_DoIndexing2, FFMS_ErrorInfo, FFMS_GetFirstIndexedTrackOfType, FFMS_GetFrame,
-    FFMS_GetPixFmt, FFMS_GetVideoProperties, FFMS_Index, FFMS_IndexBelongsToFile, FFMS_Init,
-    FFMS_ReadIndex, FFMS_Resizers, FFMS_SetOutputFormatV2, FFMS_TrackType,
-    FFMS_TrackTypeIndexSettings, FFMS_VideoSource, FFMS_WriteIndex,
+    FFMS_GetPixFmt, FFMS_GetTrackFromIndex, FFMS_GetTrackType, FFMS_GetVideoProperties, FFMS_Index,
+    FFMS_IndexBelongsToFile, FFMS_Init, FFMS_ReadIndex, FFMS_Resizers, FFMS_SetOutputFormatV2,
+    FFMS_TrackType, FFMS_TrackTypeIndexSettings, FFMS_VideoSource, FFMS_WriteIndex,
 };
 use num_rational::Rational32;
 use v_frame::{
@@ -86,6 +86,7 @@ impl Ffms2Decoder {
     /// # Arguments
     ///
     /// * `input` - A path to the input video file.
+    /// * `track_index` - The index of the video track to use for decoding. Defaults to the first video track.
     ///
     /// # Returns
     ///
@@ -95,6 +96,7 @@ impl Ffms2Decoder {
     ///
     /// This function can return the following errors:
     /// * `DecoderError::FileReadError` - If there's an error converting the input path to a `CString`.
+    /// * `DecoderError::NoVideoStream` - If the input file contains no video or if the specified `track_index` is not a video track.
     /// * `DecoderError::GenericDecodeError` - If there's an error creating the video source, indexer, or indexing the input file.
     /// * `DecoderError::UnsupportedFormat` - If the pixel format of the video is not supported.
     ///
@@ -103,7 +105,7 @@ impl Ffms2Decoder {
     /// This function performs unsafe operations to interact with the FFMS2 library.
     /// It ensures proper error handling and resource cleanup.
     #[inline]
-    pub fn new<P: AsRef<Path>>(input: P) -> Result<Self, DecoderError> {
+    pub fn new<P: AsRef<Path>>(input: P, track_index: Option<u8>) -> Result<Self, DecoderError> {
         FFMS2_INIT.call_once(|| {
             // SAFETY: FFI call with infallible parameters
             unsafe {
@@ -111,7 +113,7 @@ impl Ffms2Decoder {
             }
         });
 
-        let index_handle = Self::get_index(input.as_ref())?;
+        let index_handle = Self::get_index(input.as_ref(), track_index)?;
 
         let threads = std::thread::available_parallelism().map_or(8, std::num::NonZero::get) as i32;
 
@@ -209,7 +211,7 @@ impl Ffms2Decoder {
         Ok(())
     }
 
-    fn get_index(input: &Path) -> Result<FfmsIndex, DecoderError> {
+    fn get_index(input: &Path, track_index: Option<u8>) -> Result<FfmsIndex, DecoderError> {
         // SAFETY: we free this on all branches below
         let mut err = unsafe { empty_error_info() };
 
@@ -289,7 +291,20 @@ impl Ffms2Decoder {
         };
 
         // SAFETY: verified `idx` is not null
-        let track = unsafe { FFMS_GetFirstIndexedTrackOfType(idx, 0, std::ptr::addr_of_mut!(err)) };
+        let track = unsafe {
+            let track_index = track_index.map_or_else(
+                || FFMS_GetFirstIndexedTrackOfType(idx, 0, std::ptr::addr_of_mut!(err)),
+                |index| index as i32,
+            );
+
+            let track = FFMS_GetTrackFromIndex(idx, track_index);
+            if FFMS_GetTrackType(track) != (FFMS_TrackType::FFMS_TYPE_VIDEO as i32) {
+                free_error_info(&mut err);
+                return Err(DecoderError::NoVideoStream);
+            }
+
+            track_index
+        };
 
         free_error_info(&mut err);
 
