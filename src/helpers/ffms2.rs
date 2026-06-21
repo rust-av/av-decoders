@@ -27,19 +27,9 @@ use crate::{DecoderError, LUMA_PADDING, VideoDetails};
 /// Ensures FFMS2 is initialized only once per process
 static FFMS2_INIT: Once = Once::new();
 
-/// A decoder for video files using the FFMS2 library.
+/// Video decoder using the FFMS2 library.
 ///
-/// This struct represents a video decoder that uses the FFMS2 library to decode video files.
-/// It holds video details, a video source handle, and an index handle for efficient frame access.
-///
-/// # Fields
-/// * `video_details` - Contains information about the video such as width, height, frame rate, etc.
-/// * `video_source` - A pointer to the FFMS2 video source.
-/// * `index_handle` - A handle to the index used for efficient frame access.
-///
-/// # Safety
-/// This struct contains raw pointers and should be used with care. The `Drop` implementation
-/// ensures proper cleanup of resources.
+/// Contains raw pointers; cleaned up via `Drop`.
 pub struct Ffms2Decoder {
     /// Contains the resolution and bit depth of the loaded video stream
     pub video_details: VideoDetails,
@@ -77,33 +67,16 @@ impl Drop for FfmsIndex {
 }
 
 impl Ffms2Decoder {
-    /// Creates a new `Ffms2Decoder` instance for the given input file.
+    /// Creates a new FFMS2 decoder for the given video file.
     ///
-    /// This function initializes the FFMS2 library, creates an index for the input file,
-    /// and sets up a video source for decoding. It returns a new `Ffms2Decoder` instance
-    /// if successful, or an error if any step fails.
-    ///
-    /// # Arguments
-    ///
-    /// * `input` - A path to the input video file.
-    /// * `track_index` - The index of the video track to use for decoding. Defaults to the first video track.
-    ///
-    /// # Returns
-    ///
-    /// * `Result<Self, DecoderError>` - A new `Ffms2Decoder` instance on success, or a `DecoderError` on failure.
+    /// Initializes FFMS2, creates/reads an index, and sets up a video source.
+    /// `track_index` defaults to the first video track if `None`.
     ///
     /// # Errors
     ///
-    /// This function can return the following errors:
-    /// * `DecoderError::FileReadError` - If there's an error converting the input path to a `CString`.
-    /// * `DecoderError::NoVideoStream` - If the input file contains no video or if the specified `track_index` is not a video track.
-    /// * `DecoderError::GenericDecodeError` - If there's an error creating the video source, indexer, or indexing the input file.
-    /// * `DecoderError::UnsupportedFormat` - If the pixel format of the video is not supported.
-    ///
-    /// # Safety
-    ///
-    /// This function performs unsafe operations to interact with the FFMS2 library.
-    /// It ensures proper error handling and resource cleanup.
+    /// Returns [`DecoderError::NoVideoStream`] if no video track is found,
+    /// [`DecoderError::UnsupportedFormat`] for unsupported pixel formats,
+    /// [`DecoderError::GenericDecodeError`] on indexing or source creation failure.
     #[inline]
     pub fn new<P: AsRef<Path>>(input: P, track_index: Option<u8>) -> Result<Self, DecoderError> {
         FFMS2_INIT.call_once(|| {
@@ -636,13 +609,10 @@ fn video_info_to_pixel_format(
 
 const ERR_BUFFER_SIZE: usize = 1024;
 
-/// Creates a new `FFMS_ErrorInfo` struct with allocated buffer
-///
-/// # Returns
-/// A new `FFMS_ErrorInfo` struct with a 1024-byte buffer allocated
+/// Allocates a zeroed `FFMS_ErrorInfo` with a 1024-byte buffer.
 ///
 /// # Safety
-/// The caller is responsible for freeing the allocated buffer when done
+/// The caller must free the buffer via [`free_error_info`] when done.
 unsafe fn empty_error_info() -> FFMS_ErrorInfo {
     // SAFETY: we fill the required buffer before returning
     let mut err: FFMS_ErrorInfo = unsafe { std::mem::zeroed() };
@@ -659,10 +629,10 @@ unsafe fn empty_error_info() -> FFMS_ErrorInfo {
     err
 }
 
-/// Extracts error message from `FFMS_ErrorInfo` struct
+/// Extracts the error message from an `FFMS_ErrorInfo` struct.
 ///
 /// # Safety
-/// The `FFMS_ErrorInfo` struct must be properly initialized by an FFMS2 function call
+/// `err` must have been populated by an FFMS2 function call.
 fn get_error_message(err: FFMS_ErrorInfo) -> String {
     if err.Buffer.is_null() {
         return "Unknown error".to_string();
@@ -674,10 +644,10 @@ fn get_error_message(err: FFMS_ErrorInfo) -> String {
         .into_owned()
 }
 
-/// Frees the buffer allocated by `empty_error_info`
+/// Frees the buffer previously allocated by [`empty_error_info`].
 ///
 /// # Safety
-/// The buffer must be a valid pointer returned by `empty_error_info`
+/// `err.Buffer` must be a valid pointer from [`empty_error_info`], or null.
 fn free_error_info(err: &mut FFMS_ErrorInfo) {
     if !err.Buffer.is_null() {
         // SAFETY: we validated that buffer is not null
