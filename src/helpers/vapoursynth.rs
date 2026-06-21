@@ -9,7 +9,7 @@ use vapoursynth::{
     map::OwnedMap,
     node::Node,
     video_info::{Property, VideoInfo},
-    vsscript::{Environment, EvalFlags},
+    vsscript::{Environment, Error as VsscriptError, EvalFlags},
 };
 
 use super::frame_builder::new_padded_frame;
@@ -36,6 +36,27 @@ pub type VariableName = String;
 // The value of the variable to set in the VapourSynth environment.
 pub type VariableValue = String;
 
+fn map_vsscript_error(error: &VsscriptError) -> DecoderError {
+    match error {
+        VsscriptError::CStringConversion(_)
+        | VsscriptError::FileOpen(_)
+        | VsscriptError::FileRead(_)
+        | VsscriptError::PathInvalidUnicode => DecoderError::FileReadError {
+            cause: error.to_string(),
+        },
+        VsscriptError::VSScript(vsscript_error) => DecoderError::FileReadError {
+            cause: vsscript_error.to_string(),
+        },
+        VsscriptError::NoSuchVariable
+        | VsscriptError::NoCore
+        | VsscriptError::NoOutput
+        | VsscriptError::NoAPI
+        | VsscriptError::ScriptCreationFailed => DecoderError::VapoursynthInternalError {
+            cause: error.to_string(),
+        },
+    }
+}
+
 /// An interface that is used for decoding a video stream using Vapoursynth
 pub struct VapoursynthDecoder {
     #[allow(missing_docs)]
@@ -58,26 +79,7 @@ impl VapoursynthDecoder {
     /// cannot be initialized.
     #[inline]
     pub fn new() -> Result<VapoursynthDecoder, DecoderError> {
-        let env = Environment::new().map_err(|e| match e {
-            vapoursynth::vsscript::Error::CStringConversion(_)
-            | vapoursynth::vsscript::Error::FileOpen(_)
-            | vapoursynth::vsscript::Error::FileRead(_)
-            | vapoursynth::vsscript::Error::PathInvalidUnicode => DecoderError::FileReadError {
-                cause: e.to_string(),
-            },
-            vapoursynth::vsscript::Error::VSScript(vsscript_error) => DecoderError::FileReadError {
-                cause: vsscript_error.to_string(),
-            },
-            vapoursynth::vsscript::Error::NoSuchVariable
-            | vapoursynth::vsscript::Error::NoCore
-            | vapoursynth::vsscript::Error::NoOutput
-            | vapoursynth::vsscript::Error::NoAPI
-            | vapoursynth::vsscript::Error::ScriptCreationFailed => {
-                DecoderError::VapoursynthInternalError {
-                    cause: e.to_string(),
-                }
-            }
-        })?;
+        let env = Environment::new().map_err(|e| map_vsscript_error(&e))?;
         Ok(Self {
             env,
             modify_node: None,
@@ -109,28 +111,7 @@ impl VapoursynthDecoder {
         decoder
             .get_env()
             .eval_file(input, EvalFlags::SetWorkingDir)
-            .map_err(|e| match e {
-                vapoursynth::vsscript::Error::CStringConversion(_)
-                | vapoursynth::vsscript::Error::FileOpen(_)
-                | vapoursynth::vsscript::Error::FileRead(_)
-                | vapoursynth::vsscript::Error::PathInvalidUnicode => DecoderError::FileReadError {
-                    cause: e.to_string(),
-                },
-                vapoursynth::vsscript::Error::VSScript(vsscript_error) => {
-                    DecoderError::FileReadError {
-                        cause: vsscript_error.to_string(),
-                    }
-                }
-                vapoursynth::vsscript::Error::NoSuchVariable
-                | vapoursynth::vsscript::Error::NoCore
-                | vapoursynth::vsscript::Error::NoOutput
-                | vapoursynth::vsscript::Error::NoAPI
-                | vapoursynth::vsscript::Error::ScriptCreationFailed => {
-                    DecoderError::VapoursynthInternalError {
-                        cause: e.to_string(),
-                    }
-                }
-            })?;
+            .map_err(|e| map_vsscript_error(&e))?;
         Ok(decoder)
     }
 
@@ -154,26 +135,10 @@ impl VapoursynthDecoder {
         if let Some(index) = output_index {
             decoder.output_index = index as i32;
         }
-        decoder.get_env().eval_script(script).map_err(|e| match e {
-            vapoursynth::vsscript::Error::CStringConversion(_)
-            | vapoursynth::vsscript::Error::FileOpen(_)
-            | vapoursynth::vsscript::Error::FileRead(_)
-            | vapoursynth::vsscript::Error::PathInvalidUnicode => DecoderError::FileReadError {
-                cause: e.to_string(),
-            },
-            vapoursynth::vsscript::Error::VSScript(vsscript_error) => DecoderError::FileReadError {
-                cause: vsscript_error.to_string(),
-            },
-            vapoursynth::vsscript::Error::NoSuchVariable
-            | vapoursynth::vsscript::Error::NoCore
-            | vapoursynth::vsscript::Error::NoOutput
-            | vapoursynth::vsscript::Error::NoAPI
-            | vapoursynth::vsscript::Error::ScriptCreationFailed => {
-                DecoderError::VapoursynthInternalError {
-                    cause: e.to_string(),
-                }
-            }
-        })?;
+        decoder
+            .get_env()
+            .eval_script(script)
+            .map_err(|e| map_vsscript_error(&e))?;
         Ok(decoder)
     }
 
