@@ -44,6 +44,7 @@ mod helpers {
     pub(crate) mod ffmpeg;
     #[cfg(feature = "ffms2")]
     pub(crate) mod ffms2;
+    mod frame_builder;
     #[cfg(feature = "vapoursynth")]
     pub(crate) mod vapoursynth;
     pub(crate) mod y4m;
@@ -548,7 +549,7 @@ impl DecoderImpl {
         }
     }
 
-    #[cfg(any(feature = "vapoursynth", feature = "ffms2"))]
+    #[cfg(feature = "vapoursynth")]
     pub(crate) fn get_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,

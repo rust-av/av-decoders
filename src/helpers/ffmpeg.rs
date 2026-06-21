@@ -1,9 +1,6 @@
 extern crate ffmpeg_the_third as ffmpeg;
 
-use std::{
-    num::{NonZeroU8, NonZeroUsize},
-    path::Path,
-};
+use std::path::Path;
 
 use ffmpeg::{
     codec::{decoder, packet},
@@ -14,13 +11,11 @@ use ffmpeg::{
 };
 use ffmpeg_the_third::threading;
 use num_rational::Rational32;
-use v_frame::{
-    chroma::ChromaSubsampling,
-    frame::{Frame, FrameBuilder},
-    pixel::Pixel,
-};
+use v_frame::{chroma::ChromaSubsampling, frame::Frame, pixel::Pixel};
 
-use crate::{LUMA_PADDING, VideoDetails, error::DecoderError};
+use crate::{VideoDetails, error::DecoderError};
+
+use super::frame_builder::new_padded_frame;
 
 /// An interface that is used for decoding a video stream using ffmpeg
 ///
@@ -145,34 +140,7 @@ impl FfmpegDecoder {
         decoded: &frame::Video,
         luma_only: bool,
     ) -> Result<Frame<T>, DecoderError> {
-        let width = self.video_details.width;
-        let height = self.video_details.height;
-        let bit_depth = self.video_details.bit_depth;
-        let chroma_sampling = self.video_details.chroma_sampling;
-        let mut frame: Frame<T> = FrameBuilder::new(
-            NonZeroUsize::new(width).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-width resolution is not supported".to_string(),
-            })?,
-            NonZeroUsize::new(height).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-height resolution is not supported".to_string(),
-            })?,
-            if luma_only {
-                ChromaSubsampling::Monochrome
-            } else {
-                chroma_sampling
-            },
-            NonZeroU8::new(bit_depth as u8).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-bit-depth is not supported".to_string(),
-            })?,
-        )
-        .luma_padding_bottom(LUMA_PADDING)
-        .luma_padding_top(LUMA_PADDING)
-        .luma_padding_left(LUMA_PADDING)
-        .luma_padding_right(LUMA_PADDING)
-        .build()
-        .map_err(|e| DecoderError::GenericDecodeError {
-            cause: e.to_string(),
-        })?;
+        let mut frame: Frame<T> = new_padded_frame(&self.video_details, luma_only)?;
 
         frame
             .y_plane

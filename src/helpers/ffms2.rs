@@ -1,7 +1,7 @@
 use std::{
     ffi::CString,
     ffi::c_char,
-    num::{NonZeroU8, NonZeroUsize},
+    num::NonZeroUsize,
     path::Path,
     slice,
     str::FromStr,
@@ -16,13 +16,11 @@ use ffms2_sys::{
     FFMS_TrackType, FFMS_TrackTypeIndexSettings, FFMS_VideoSource, FFMS_WriteIndex,
 };
 use num_rational::Rational32;
-use v_frame::{
-    chroma::ChromaSubsampling,
-    frame::{Frame, FrameBuilder},
-    pixel::Pixel,
-};
+use v_frame::{chroma::ChromaSubsampling, frame::Frame, pixel::Pixel};
 
-use crate::{DecoderError, LUMA_PADDING, VideoDetails};
+use crate::{DecoderError, VideoDetails};
+
+use super::frame_builder::new_padded_frame;
 
 /// Ensures FFMS2 is initialized only once per process
 static FFMS2_INIT: Once = Once::new();
@@ -362,34 +360,7 @@ impl Ffms2Decoder {
         }
         free_error_info(&mut err);
 
-        let width = self.video_details.width;
-        let height = self.video_details.height;
-        let bit_depth = self.video_details.bit_depth;
-        let chroma_sampling = self.video_details.chroma_sampling;
-        let mut frame: Frame<T> = FrameBuilder::new(
-            NonZeroUsize::new(width).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-width resolution is not supported".to_string(),
-            })?,
-            NonZeroUsize::new(height).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-height resolution is not supported".to_string(),
-            })?,
-            if luma_only {
-                ChromaSubsampling::Monochrome
-            } else {
-                chroma_sampling
-            },
-            NonZeroU8::new(bit_depth as u8).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-bit-depth is not supported".to_string(),
-            })?,
-        )
-        .luma_padding_bottom(LUMA_PADDING)
-        .luma_padding_top(LUMA_PADDING)
-        .luma_padding_left(LUMA_PADDING)
-        .luma_padding_right(LUMA_PADDING)
-        .build()
-        .map_err(|e| DecoderError::GenericDecodeError {
-            cause: format!("Failed to build frame struct: {e}"),
-        })?;
+        let mut frame: Frame<T> = new_padded_frame(&self.video_details, luma_only)?;
 
         let chroma_height = self.video_details.height
             / self

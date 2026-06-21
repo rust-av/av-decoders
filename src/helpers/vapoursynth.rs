@@ -1,17 +1,8 @@
+use crate::VideoDetails;
 use crate::error::DecoderError;
-use crate::{LUMA_PADDING, VideoDetails};
 use num_rational::Rational32;
-use std::{
-    collections::HashMap,
-    num::{NonZeroU8, NonZeroUsize},
-    path::Path,
-    slice,
-};
-use v_frame::{
-    chroma::ChromaSubsampling,
-    frame::{Frame, FrameBuilder},
-    pixel::Pixel,
-};
+use std::{collections::HashMap, num::NonZeroUsize, path::Path, slice};
+use v_frame::{chroma::ChromaSubsampling, frame::Frame, pixel::Pixel};
 use vapoursynth::{
     api::API,
     core::CoreRef,
@@ -20,6 +11,8 @@ use vapoursynth::{
     video_info::{Property, VideoInfo},
     vsscript::{Environment, EvalFlags},
 };
+
+use super::frame_builder::new_padded_frame;
 
 const DEFAULT_OUTPUT_INDEX: i32 = 0;
 
@@ -281,32 +274,7 @@ impl VapoursynthDecoder {
             .get_frame(frame_index)
             .map_err(|_| DecoderError::EndOfFile)?;
 
-        let mut frame: Frame<T> = FrameBuilder::new(
-            NonZeroUsize::new(cfg.width).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-width resolution is not supported".to_string(),
-            })?,
-            NonZeroUsize::new(cfg.height).ok_or_else(|| DecoderError::GenericDecodeError {
-                cause: "Zero-height resolution is not supported".to_string(),
-            })?,
-            if luma_only {
-                ChromaSubsampling::Monochrome
-            } else {
-                cfg.chroma_sampling
-            },
-            NonZeroU8::new(cfg.bit_depth as u8).ok_or_else(|| {
-                DecoderError::GenericDecodeError {
-                    cause: "Zero-bit-depth is not supported".to_string(),
-                }
-            })?,
-        )
-        .luma_padding_bottom(LUMA_PADDING)
-        .luma_padding_top(LUMA_PADDING)
-        .luma_padding_left(LUMA_PADDING)
-        .luma_padding_right(LUMA_PADDING)
-        .build()
-        .map_err(|e| DecoderError::GenericDecodeError {
-            cause: e.to_string(),
-        })?;
+        let mut frame: Frame<T> = new_padded_frame(cfg, luma_only)?;
 
         frame
             .y_plane
