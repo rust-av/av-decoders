@@ -452,6 +452,10 @@ impl Ffms2Decoder {
 // These are used to interpret FFMS_Frame::ConvertedPixelFormat values
 // Using `FFMS_GetPixFmt` ensures we have the correct value regardless
 // of the ffmpeg version we are linked against
+//
+// These are stored in `LazyLock`s because they can be frequently called,
+// which should be a fast operation, but because it is an FFI,
+// would always invoke an expensive `call` operation`.
 static AV_PIX_FMT_YUV420P: LazyLock<i32> = LazyLock::new(|| {
     // SAFETY: FFI call with a const C string
     unsafe { FFMS_GetPixFmt(c"yuv420p".as_ptr().cast()) }
