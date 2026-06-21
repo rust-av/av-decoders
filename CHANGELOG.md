@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.11.1
+
+- fix: correct MSRV requirement
+
 ## Version 0.11.0
 
 - feat!: add `output_index` option to `VapoursynthDecoder::from_file` and `VapoursynthDecoder::from_script`, this allows specifying which output node to decode

@@ -1,8 +1,8 @@
 [package]
 name = "av-decoders"
-version = "0.11.0"
+version = "0.11.1"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.95"
 description = "Decoders for use in the rust-av ecosystem"
 repository = "https://github.com/rust-av/av-decoders"
 license = "MIT"
