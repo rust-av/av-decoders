@@ -92,8 +92,8 @@ impl Ffms2Decoder {
             CString::new(index_handle.path.as_str()).map_err(|e| DecoderError::FileReadError {
                 cause: e.to_string(),
             })?;
-        // SAFETY: we free this on all branches below
-        let mut err = unsafe { empty_error_info() };
+        let mut err_buffer: [c_char; ERR_BUFFER_SIZE] = [0; ERR_BUFFER_SIZE];
+        let mut err = empty_error_info(&mut err_buffer);
         // SAFETY: `source` is not null since we just created it
         let video_source = unsafe {
             FFMS_CreateVideoSource(
@@ -108,13 +108,10 @@ impl Ffms2Decoder {
 
         if video_source.is_null() {
             let error_msg = get_error_message(err);
-            free_error_info(&mut err);
             return Err(DecoderError::GenericDecodeError {
                 cause: format!("Failed to create video source: {}", error_msg),
             });
         }
-
-        free_error_info(&mut err);
 
         // SAFETY: verified that `video_source` is not null
         let video_details = unsafe { Self::get_video_details(video_source)? };
@@ -151,8 +148,8 @@ impl Ffms2Decoder {
         bit_depth: u8,
         chroma_subsampling: ChromaSubsampling,
     ) -> Result<(), DecoderError> {
-        // SAFETY: we free this on all branches below
-        let mut err = unsafe { empty_error_info() };
+        let mut err_buffer: [c_char; ERR_BUFFER_SIZE] = [0; ERR_BUFFER_SIZE];
+        let mut err = empty_error_info(&mut err_buffer);
         // SAFETY: `self.video_source` cannot be null here
         unsafe {
             FFMS_SetOutputFormatV2(
@@ -171,10 +168,8 @@ impl Ffms2Decoder {
         }
         if err.ErrorType != 0 {
             let msg = get_error_message(err);
-            free_error_info(&mut err);
             return Err(DecoderError::Ffms2InternalError { cause: msg });
         }
-        free_error_info(&mut err);
 
         // SAFETY: `self.video_source` cannot be null here
         self.video_details = unsafe { Self::get_video_details(self.video_source)? };
@@ -183,8 +178,8 @@ impl Ffms2Decoder {
     }
 
     fn get_index(input: &Path, track_index: Option<u8>) -> Result<FfmsIndex, DecoderError> {
-        // SAFETY: we free this on all branches below
-        let mut err = unsafe { empty_error_info() };
+        let mut err_buffer: [c_char; ERR_BUFFER_SIZE] = [0; ERR_BUFFER_SIZE];
+        let mut err = empty_error_info(&mut err_buffer);
 
         let input_cstr = CString::from_str(&input.to_string_lossy()).map_err(|e| {
             DecoderError::FileReadError {
@@ -224,7 +219,6 @@ impl Ffms2Decoder {
                 unsafe { FFMS_CreateIndexer(input_cstr.as_ptr(), std::ptr::addr_of_mut!(err)) };
             if idxer.is_null() {
                 let error_msg = get_error_message(err);
-                free_error_info(&mut err);
                 return Err(DecoderError::GenericDecodeError {
                     cause: format!("Failed to create indexer: {}", error_msg),
                 });
@@ -248,7 +242,6 @@ impl Ffms2Decoder {
 
             if idx.is_null() {
                 let error_msg = get_error_message(err);
-                free_error_info(&mut err);
                 return Err(DecoderError::GenericDecodeError {
                     cause: format!("Failed to index input file: {}", error_msg),
                 });
@@ -270,14 +263,11 @@ impl Ffms2Decoder {
 
             let track = FFMS_GetTrackFromIndex(idx, track_index);
             if FFMS_GetTrackType(track) != (FFMS_TrackType::FFMS_TYPE_VIDEO as i32) {
-                free_error_info(&mut err);
                 return Err(DecoderError::NoVideoStream);
             }
 
             track_index
         };
-
-        free_error_info(&mut err);
 
         Ok(FfmsIndex {
             path: input.to_string_lossy().to_string(),
@@ -292,7 +282,8 @@ impl Ffms2Decoder {
     ) -> Result<VideoDetails, DecoderError> {
         // SAFETY: caller must verify that `video` is not null
         unsafe {
-            let mut err = std::mem::zeroed::<FFMS_ErrorInfo>();
+            let mut err_buffer: [c_char; ERR_BUFFER_SIZE] = [0; ERR_BUFFER_SIZE];
+            let mut err = empty_error_info(&mut err_buffer);
 
             let props = FFMS_GetVideoProperties(video);
             let frame = FFMS_GetFrame(video, 0, std::ptr::addr_of_mut!(err));
@@ -341,8 +332,8 @@ impl Ffms2Decoder {
         {
             return Err(DecoderError::EndOfFile);
         }
-        // SAFETY: we free `err` on all branches below
-        let mut err = unsafe { empty_error_info() };
+        let mut err_buffer: [c_char; ERR_BUFFER_SIZE] = [0; ERR_BUFFER_SIZE];
+        let mut err = empty_error_info(&mut err_buffer);
         // SAFETY: `self.video_source` cannot be null
         let raw_frame = unsafe {
             FFMS_GetFrame(
@@ -353,12 +344,10 @@ impl Ffms2Decoder {
         };
         if raw_frame.is_null() {
             let error_msg = get_error_message(err);
-            free_error_info(&mut err);
             return Err(DecoderError::Ffms2InternalError {
                 cause: format!("Failed to read frame: {error_msg}"),
             });
         }
-        free_error_info(&mut err);
 
         let mut frame: Frame<T> = new_padded_frame(&self.video_details, luma_only)?;
 
@@ -584,49 +573,44 @@ fn video_info_to_pixel_format(
 
 const ERR_BUFFER_SIZE: usize = 1024;
 
-/// Allocates a zeroed `FFMS_ErrorInfo` with a 1024-byte buffer.
-///
-/// # Safety
-/// The caller must free the buffer via [`free_error_info`] when done.
-unsafe fn empty_error_info() -> FFMS_ErrorInfo {
-    // SAFETY: we fill the required buffer before returning
-    let mut err: FFMS_ErrorInfo = unsafe { std::mem::zeroed() };
-    // Allocate 1024 bytes for the error buffer
-    let buffer = vec![0u8; ERR_BUFFER_SIZE];
-    let buffer_ptr = buffer.as_ptr() as *mut c_char;
-    #[expect(
-        clippy::mem_forget,
-        reason = "intentionally avoid drop here, must be freed by caller"
-    )]
-    std::mem::forget(buffer);
-    err.Buffer = buffer_ptr;
-    err.BufferSize = ERR_BUFFER_SIZE as i32;
-    err
+/// Builds an `FFMS_ErrorInfo` that writes into the caller-owned stack buffer.
+fn empty_error_info(buffer: &mut [c_char; ERR_BUFFER_SIZE]) -> FFMS_ErrorInfo {
+    FFMS_ErrorInfo {
+        ErrorType: 0,
+        SubType: 0,
+        BufferSize: ERR_BUFFER_SIZE as i32,
+        Buffer: buffer.as_mut_ptr(),
+    }
 }
 
 /// Extracts the error message from an `FFMS_ErrorInfo` struct.
 ///
 /// # Safety
-/// `err` must have been populated by an FFMS2 function call.
+/// `err` must have been populated by an FFMS2 function call while its buffer is still alive.
 fn get_error_message(err: FFMS_ErrorInfo) -> String {
     if err.Buffer.is_null() {
         return "Unknown error".to_string();
     }
 
-    // SAFETY: we validated that buffer is not null
+    // SAFETY: FFMS2 writes a nul-terminated C string into the live error buffer.
     unsafe { std::ffi::CStr::from_ptr(err.Buffer) }
         .to_string_lossy()
         .into_owned()
 }
 
-/// Frees the buffer previously allocated by [`empty_error_info`].
-///
-/// # Safety
-/// `err.Buffer` must be a valid pointer from [`empty_error_info`], or null.
-fn free_error_info(err: &mut FFMS_ErrorInfo) {
-    if !err.Buffer.is_null() {
-        // SAFETY: we validated that buffer is not null
-        let _ = unsafe { Box::from_raw(err.Buffer as *mut [u8; ERR_BUFFER_SIZE]) };
-        err.Buffer = std::ptr::null_mut();
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_error_info_points_to_caller_owned_buffer() {
+        let mut buffer: [c_char; ERR_BUFFER_SIZE] = [0; ERR_BUFFER_SIZE];
+
+        let err = empty_error_info(&mut buffer);
+
+        assert_eq!(err.ErrorType, 0);
+        assert_eq!(err.SubType, 0);
+        assert_eq!(err.BufferSize, ERR_BUFFER_SIZE as i32);
+        assert_eq!(err.Buffer, buffer.as_mut_ptr());
     }
 }
