@@ -4,6 +4,9 @@
 
 - feat!: add `output_index` option to `VapoursynthDecoder::from_file` and `VapoursynthDecoder::from_script`, this allows specifying which output node to decode
 - feat!: add `track_index` option to `FFMS2Decoder::new`, this allows specifying which video track to decode
+- feat!: add `get_vapoursynth` function to get the VapourSynth Environment and Node at the same time
+- feat!: make `modify_node` callback public, this allows updating the modifier after instantiating `VapoursynthDecoder`
+- feat: add `seek_to_frame` method to skip frames without decoding them, useful for scene detection and partial video processing
 - refactor!: remove direct `Decoder` VapourSynth accessors; use `get_vapoursynth_impl` for backend access
 - fix: improve error message when `FFMS2Decoder` tries to decode a file with no video tracks
 
