@@ -1,7 +1,7 @@
 use crate::VideoDetails;
 use crate::error::DecoderError;
 use num_rational::Rational32;
-use std::{collections::HashMap, num::NonZeroUsize, path::Path, slice};
+use std::{collections::HashMap, path::Path, slice};
 use v_frame::{chroma::ChromaSubsampling, frame::Frame, pixel::Pixel};
 use vapoursynth::{
     api::API,
@@ -251,7 +251,7 @@ impl VapoursynthDecoder {
                         vs_frame.stride(0) * vs_frame.height(0),
                     )
                 },
-                NonZeroUsize::new(vs_frame.stride(0)).expect("zero stride should be impossible"),
+                vs_frame.stride(0),
             )
             .map_err(|e| DecoderError::GenericDecodeError {
                 cause: e.to_string(),
@@ -266,8 +266,7 @@ impl VapoursynthDecoder {
                             vs_frame.stride(1) * vs_frame.height(1),
                         )
                     },
-                    NonZeroUsize::new(vs_frame.stride(1))
-                        .expect("zero stride should be impossible"),
+                    vs_frame.stride(1),
                 )
                 .map_err(|e| DecoderError::GenericDecodeError {
                     cause: e.to_string(),
@@ -283,8 +282,7 @@ impl VapoursynthDecoder {
                             vs_frame.stride(2) * vs_frame.height(2),
                         )
                     },
-                    NonZeroUsize::new(vs_frame.stride(2))
-                        .expect("zero stride should be impossible"),
+                    vs_frame.stride(2),
                 )
                 .map_err(|e| DecoderError::GenericDecodeError {
                     cause: e.to_string(),

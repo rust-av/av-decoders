@@ -20,7 +20,7 @@ ffmpeg-the-third = { version = "5.0.0", default-features = false, features = [
 ffms2-sys = { version = "0.3.0", optional = true }
 num-rational = { version = "0.4.2", default-features = false }
 thiserror = "2.0.17"
-v_frame = "0.5"
+v_frame = "0.7"
 vapoursynth = { version = "0.5", optional = true }
 y4m = "0.8"
 

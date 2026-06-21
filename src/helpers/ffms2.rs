@@ -1,7 +1,6 @@
 use std::{
     ffi::CString,
     ffi::c_char,
-    num::NonZeroUsize,
     path::Path,
     slice,
     str::FromStr,
@@ -364,8 +363,7 @@ impl Ffms2Decoder {
                     (*raw_frame).Data[0],
                     (*raw_frame).Linesize[0] as usize * self.video_details.height,
                 ),
-                NonZeroUsize::new((*raw_frame).Linesize[0] as usize)
-                    .expect("zero stride should be impossible"),
+                (*raw_frame).Linesize[0] as usize,
             )
         }
         .map_err(|e| DecoderError::GenericDecodeError {
@@ -379,8 +377,7 @@ impl Ffms2Decoder {
                         (*raw_frame).Data[1],
                         (*raw_frame).Linesize[1] as usize * chroma_height,
                     ),
-                    NonZeroUsize::new((*raw_frame).Linesize[1] as usize)
-                        .expect("zero stride should be impossible"),
+                    (*raw_frame).Linesize[1] as usize,
                 )
             }
             .map_err(|e| DecoderError::GenericDecodeError {
@@ -395,8 +392,7 @@ impl Ffms2Decoder {
                         (*raw_frame).Data[2],
                         (*raw_frame).Linesize[2] as usize * chroma_height,
                     ),
-                    NonZeroUsize::new((*raw_frame).Linesize[2] as usize)
-                        .expect("zero stride should be impossible"),
+                    (*raw_frame).Linesize[2] as usize,
                 )
             }
             .map_err(|e| DecoderError::GenericDecodeError {

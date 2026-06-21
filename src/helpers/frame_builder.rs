@@ -1,5 +1,3 @@
-use std::num::{NonZeroU8, NonZeroUsize};
-
 use v_frame::{
     chroma::ChromaSubsampling,
     frame::{Frame, FrameBuilder},
@@ -12,32 +10,27 @@ pub(super) fn new_padded_frame<T: Pixel>(
     cfg: &VideoDetails,
     luma_only: bool,
 ) -> Result<Frame<T>, DecoderError> {
+    if cfg.width == 0 || cfg.height == 0 || cfg.bit_depth == 0 {
+        return Err(DecoderError::GenericDecodeError {
+            cause: "Zero resolution is not supported".to_string(),
+        });
+    }
+
     let chroma_sampling = if luma_only {
         ChromaSubsampling::Monochrome
     } else {
         cfg.chroma_sampling
     };
 
-    FrameBuilder::new(
-        NonZeroUsize::new(cfg.width).ok_or_else(|| DecoderError::GenericDecodeError {
-            cause: "Zero-width resolution is not supported".to_string(),
-        })?,
-        NonZeroUsize::new(cfg.height).ok_or_else(|| DecoderError::GenericDecodeError {
-            cause: "Zero-height resolution is not supported".to_string(),
-        })?,
-        chroma_sampling,
-        NonZeroU8::new(cfg.bit_depth as u8).ok_or_else(|| DecoderError::GenericDecodeError {
-            cause: "Zero-bit-depth is not supported".to_string(),
-        })?,
-    )
-    .luma_padding_bottom(LUMA_PADDING)
-    .luma_padding_top(LUMA_PADDING)
-    .luma_padding_left(LUMA_PADDING)
-    .luma_padding_right(LUMA_PADDING)
-    .build()
-    .map_err(|e| DecoderError::GenericDecodeError {
-        cause: e.to_string(),
-    })
+    FrameBuilder::new(cfg.width, cfg.height, chroma_sampling, cfg.bit_depth as u8)
+        .luma_padding_bottom(LUMA_PADDING)
+        .luma_padding_top(LUMA_PADDING)
+        .luma_padding_left(LUMA_PADDING)
+        .luma_padding_right(LUMA_PADDING)
+        .build()
+        .map_err(|e| DecoderError::GenericDecodeError {
+            cause: e.to_string(),
+        })
 }
 
 #[cfg(test)]
@@ -64,7 +57,7 @@ mod tests {
 
         match new_padded_frame::<u8>(&cfg, false) {
             Err(DecoderError::GenericDecodeError { cause }) => {
-                assert_eq!(cause, "Zero-width resolution is not supported");
+                assert_eq!(cause, "Zero resolution is not supported");
             }
             Err(err) => panic!("unexpected error: {err}"),
             Ok(_) => panic!("zero width should fail"),
