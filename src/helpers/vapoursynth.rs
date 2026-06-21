@@ -294,11 +294,6 @@ impl VapoursynthDecoder {
         Ok(frame)
     }
 
-    /// Returns an immutable reference to the VapourSynth environment.
-    pub(crate) fn get_environment(&self) -> &Environment {
-        &self.env
-    }
-
     /// Returns a mutable reference to the VapourSynth environment.
     pub(crate) fn get_env(&mut self) -> &mut Environment {
         &mut self.env

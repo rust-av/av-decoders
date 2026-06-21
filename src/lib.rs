@@ -33,10 +33,6 @@ use std::path::Path;
 use v_frame::chroma::ChromaSubsampling;
 use v_frame::frame::Frame;
 use v_frame::pixel::Pixel;
-#[cfg(feature = "vapoursynth")]
-use vapoursynth::node::Node;
-#[cfg(feature = "vapoursynth")]
-use vapoursynth::prelude::Environment;
 
 mod error;
 mod helpers {
@@ -419,48 +415,6 @@ clip.set_output()
                 self.frames_read = frame_index;
                 Ok(())
             }
-            _ => Err(DecoderError::UnsupportedDecoder),
-        }
-    }
-
-    /// Returns a mutable reference to the VapourSynth environment.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DecoderError::UnsupportedDecoder`] if the active backend is not VapourSynth.
-    #[inline]
-    #[cfg(feature = "vapoursynth")]
-    pub fn get_vapoursynth_env(&mut self) -> Result<&mut Environment, DecoderError> {
-        match self.decoder {
-            DecoderImpl::Vapoursynth(ref mut dec) => Ok(dec.get_env()),
-            _ => Err(DecoderError::UnsupportedDecoder),
-        }
-    }
-
-    /// Returns the VapourSynth output node for the decoded video stream.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DecoderError::UnsupportedDecoder`] if the active backend is not VapourSynth.
-    #[inline]
-    #[cfg(feature = "vapoursynth")]
-    pub fn get_vapoursynth_node(&self) -> Result<Node<'_>, DecoderError> {
-        match self.decoder {
-            DecoderImpl::Vapoursynth(ref dec) => Ok(dec.get_output_node()),
-            _ => Err(DecoderError::UnsupportedDecoder),
-        }
-    }
-
-    /// Returns both the VapourSynth environment and output node.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DecoderError::UnsupportedDecoder`] if the active backend is not VapourSynth.
-    #[inline]
-    #[cfg(feature = "vapoursynth")]
-    pub fn get_vapoursynth(&self) -> Result<(&Environment, Node<'_>), DecoderError> {
-        match self.decoder {
-            DecoderImpl::Vapoursynth(ref dec) => Ok((dec.get_environment(), dec.get_output_node())),
             _ => Err(DecoderError::UnsupportedDecoder),
         }
     }
