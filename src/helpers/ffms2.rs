@@ -42,7 +42,6 @@ pub struct Ffms2Decoder {
     pub video_details: VideoDetails,
     #[allow(missing_docs)]
     pub video_source: *mut FFMS_VideoSource,
-    #[expect(dead_code, reason = "Keep alive until drop")]
     index_handle: FfmsIndex,
 }
 
