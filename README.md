@@ -120,8 +120,19 @@ pub struct VideoDetails {
     pub bit_depth: usize,       // Bits per color component
     pub chroma_sampling: ChromaSampling, // Subsampling format
     pub frame_rate: Rational32, // Frames per second
+    pub total_frames: Option<usize>, // Total frame count, if known
+    pub color_range: Option<ColorRange>, // Limited vs. full range, if known
+    pub color_primaries: Option<ColorPrimaries>, // Color gamut, if known
+    pub color_transfer_characteristic: Option<TransferCharacteristic>, // Transfer characteristics, if known
+    pub color_space: Option<ColorSpace>, // Matrix coefficients, if known
+    pub chroma_location: Option<ChromaLocation>, // Chroma siting, if known
+    pub mastering_display: Option<MasteringDisplayMetadata>, // SMPTE ST 2086, if known
+    pub content_light_level: Option<ContentLightLevel>, // CTA-861.3, if known
 }
 ```
+
+Color metadata is populated by the FFMS2 and FFmpeg backends; Y4M files carry no color metadata, so those fields are `None`.
+The VapourSynth decoder reports `None` from `get_video_details()` but offers `VapoursynthDecoder::get_extended_video_details()`, which decodes the first frame to read the standard color frame properties.
 
 ## Backend Selection
 

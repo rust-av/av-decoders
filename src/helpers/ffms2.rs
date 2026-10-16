@@ -17,6 +17,10 @@ use ffms2_sys::{
 use num_rational::Rational32;
 use v_frame::{chroma::ChromaSubsampling, frame::Frame, pixel::Pixel};
 
+use crate::color::{
+    ChromaLocation, ColorPrimaries, ColorRange, ColorSpace, ContentLightLevel,
+    MasteringDisplayMetadata, TransferCharacteristic,
+};
 use crate::{DecoderError, VideoDetails};
 
 use super::frame_builder::new_padded_frame;
@@ -305,6 +309,51 @@ impl Ffms2Decoder {
             let pix_fmt = (*frame).ConvertedPixelFormat;
             let (bit_depth, chroma_sampling) = pixel_format_to_video_info(pix_fmt)?;
 
+            // Color metadata is passed through by FFMS2 using FFmpeg numbering
+            let color_range = ColorRange::from_raw((*frame).ColorRange);
+            let color_primaries = ColorPrimaries::from_raw((*frame).ColorPrimaries);
+            let color_trc = TransferCharacteristic::from_raw((*frame).TransferCharateristics);
+            let color_space = ColorSpace::from_raw((*frame).ColorSpace);
+            let chroma_location = ChromaLocation::from_raw((*frame).ChromaLocation);
+
+            let mastering_display = ((*frame).HasMasteringDisplayPrimaries != 0
+                || (*frame).HasMasteringDisplayLuminance != 0)
+                .then(|| MasteringDisplayMetadata {
+                    primaries: ((*frame).HasMasteringDisplayPrimaries != 0).then(|| {
+                        let primaries = [
+                            (
+                                (*frame).MasteringDisplayPrimariesX[0],
+                                (*frame).MasteringDisplayPrimariesY[0],
+                            ),
+                            (
+                                (*frame).MasteringDisplayPrimariesX[1],
+                                (*frame).MasteringDisplayPrimariesY[1],
+                            ),
+                            (
+                                (*frame).MasteringDisplayPrimariesX[2],
+                                (*frame).MasteringDisplayPrimariesY[2],
+                            ),
+                        ];
+                        let white_point = (
+                            (*frame).MasteringDisplayWhitePointX,
+                            (*frame).MasteringDisplayWhitePointY,
+                        );
+                        (primaries, white_point)
+                    }),
+                    luminance: ((*frame).HasMasteringDisplayLuminance != 0).then(|| {
+                        (
+                            (*frame).MasteringDisplayMinLuminance,
+                            (*frame).MasteringDisplayMaxLuminance,
+                        )
+                    }),
+                });
+
+            let content_light_level =
+                ((*frame).HasContentLightLevel != 0).then(|| ContentLightLevel {
+                    max_cll: (*frame).ContentLightLevelMax,
+                    max_fall: (*frame).ContentLightLevelAverage,
+                });
+
             let inf = VideoDetails {
                 width,
                 height,
@@ -312,6 +361,13 @@ impl Ffms2Decoder {
                 chroma_sampling,
                 frame_rate,
                 total_frames,
+                color_range,
+                color_primaries,
+                color_transfer_characteristic: color_trc,
+                color_space,
+                chroma_location,
+                mastering_display,
+                content_light_level,
             };
 
             Ok(inf)

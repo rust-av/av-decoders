@@ -183,6 +183,48 @@ impl VapoursynthDecoder {
         }
     }
 
+    /// Returns the video metadata with color information filled in.
+    ///
+    /// Unlike [`get_video_details`](Self::get_video_details), this decodes the first
+    /// frame of the output node to read the standard VapourSynth Frame
+    /// properties (`_ColorRange`, `_Primaries`, `_Transfer`, `_Matrix`,
+    /// `_ChromaLocation`). Properties that are absent or hold values unknown to
+    /// this library are reported as `None`; HDR metadata is not currently read.
+    ///
+    /// This requires decoding a frame of the output node which may not be
+    /// available yet, hence the dedicated method.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecoderError::EndOfFile`] if the first frame cannot be decoded,
+    /// [`DecoderError::VapoursynthInternalError`] if the output node cannot be obtained.
+    #[inline]
+    pub fn get_extended_video_details(&self) -> Result<VideoDetails, DecoderError> {
+        let mut details = self.get_video_details()?;
+
+        let node = self.get_output_node();
+        let frame = node.get_frame(0).map_err(|_| DecoderError::EndOfFile)?;
+
+        let props = frame.props();
+        details.color_range = get_int_prop(&props, "_ColorRange")
+            .and_then(|v| i32::try_from(v).ok())
+            .and_then(crate::color::ColorRange::from_raw);
+        details.color_primaries = get_int_prop(&props, "_Primaries")
+            .and_then(|v| i32::try_from(v).ok())
+            .and_then(crate::color::ColorPrimaries::from_raw);
+        details.color_transfer_characteristic = get_int_prop(&props, "_Transfer")
+            .and_then(|v| i32::try_from(v).ok())
+            .and_then(crate::color::TransferCharacteristic::from_raw);
+        details.color_space = get_int_prop(&props, "_Matrix")
+            .and_then(|v| i32::try_from(v).ok())
+            .and_then(crate::color::ColorSpace::from_raw);
+        details.chroma_location = get_int_prop(&props, "_ChromaLocation")
+            .and_then(|v| i32::try_from(v).ok())
+            .and_then(crate::color::ChromaLocation::from_raw);
+
+        Ok(details)
+    }
+
     pub(crate) fn read_video_frame<T: Pixel>(
         &mut self,
         cfg: &VideoDetails,
@@ -490,5 +532,18 @@ fn parse_video_details(info: VideoInfo) -> Result<VideoDetails, DecoderError> {
         chroma_sampling: get_chroma_sampling(info)?,
         frame_rate: get_frame_rate(info)?,
         total_frames: Some(total_frames),
+        // Color metadata requires decoding a frame; see `get_extended_video_details`
+        color_range: None,
+        color_primaries: None,
+        color_transfer_characteristic: None,
+        color_space: None,
+        chroma_location: None,
+        mastering_display: None,
+        content_light_level: None,
     })
+}
+
+/// Reads an integer frame property, returning `None` when the key is absent.
+fn get_int_prop(props: &vapoursynth::map::MapRef<'_, '_>, key: &str) -> Option<i64> {
+    props.get_int(key).ok()
 }
