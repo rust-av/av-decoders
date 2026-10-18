@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 0.12.0
+
+- feat: add `Ffms2Decoder::with_index` to open a video against a caller-chosen index path, and `Ffms2Decoder::build_index` to build or validate an index with progress and cancellation support
+- feat: add `IndexProgress` and `IndexCancelled` callback types for the above
+
 ## Version 0.11.1
 
 - fix: correct MSRV requirement
