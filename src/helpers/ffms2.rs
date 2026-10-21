@@ -595,7 +595,7 @@ impl Ffms2Decoder {
     /// Returns the path of the video file this decoder was opened from.
     #[inline]
     #[must_use]
-    pub fn get_index_path(&self) -> &Path {
+    pub fn get_video_path(&self) -> &Path {
         Path::new(&self.index_handle.path)
     }
 
@@ -675,12 +675,9 @@ unsafe extern "C" fn progress_trampoline(
     }
 
     if let Some(progress) = context.progress.as_mut()
-        && total > 0
+        && let Some(percent) = index_progress_percent(current, total)
     {
-        // `total == 0` means FFMS2 could not determine the source size, so there
-        // is no meaningful percentage to report.
-        let percent = (current.max(0) as u128 * 100 / total as u128).min(100);
-        (**progress)(percent as u8);
+        (**progress)(percent);
     }
 
     0
@@ -849,6 +846,21 @@ fn video_info_to_pixel_format(
     })
 }
 
+/// Converts an FFMS2 byte position into a whole percentage, `0..=100`.
+///
+/// Returns `None` when `total` is not positive, which means FFMS2 could not
+/// determine the source size, so there is no meaningful percentage to report.
+fn index_progress_percent(current: i64, total: i64) -> Option<u8> {
+    if total <= 0 {
+        return None;
+    }
+
+    // `current` can over-report on the final read and be negative on odd
+    // demuxers, so both ends are clamped.
+    let percent = (current.max(0) as u128 * 100 / total as u128).min(100);
+    Some(percent as u8)
+}
+
 const ERR_BUFFER_SIZE: usize = 1024;
 
 /// Builds an `FFMS_ErrorInfo` that writes into the caller-owned stack buffer.
@@ -906,24 +918,16 @@ mod tests {
 
     #[test]
     fn percentage_is_clamped_to_a_valid_range() {
-        // Mirrors the arithmetic in `progress_trampoline`, which cannot be
-        // called directly without an FFMS2 stack to drive it.
-        let percent = |current: i64, total: i64| {
-            if total <= 0 {
-                return None;
-            }
-            let percent = (current.max(0) as u128 * 100 / total as u128).min(100);
-            Some(percent as u8)
-        };
-
-        assert_eq!(percent(0, 1_000), Some(0));
-        assert_eq!(percent(1, 2), Some(50));
-        assert_eq!(percent(1_000, 1_000), Some(100));
+        assert_eq!(index_progress_percent(0, 1_000), Some(0));
+        assert_eq!(index_progress_percent(1, 2), Some(50));
+        assert_eq!(index_progress_percent(1_000, 1_000), Some(100));
         // FFMS2 can over-report on the final read, so the clamp matters.
-        assert_eq!(percent(2_000, 1_000), Some(100));
-        assert_eq!(percent(-1, 1_000), Some(0));
+        assert_eq!(index_progress_percent(2_000, 1_000), Some(100));
+        assert_eq!(index_progress_percent(-1, 1_000), Some(0));
+        assert_eq!(index_progress_percent(i64::MAX, 1), Some(100));
         // No size, no meaningful percentage.
-        assert_eq!(percent(500, 0), None);
+        assert_eq!(index_progress_percent(500, 0), None);
+        assert_eq!(index_progress_percent(500, -10), None);
     }
 
     /// A scratch directory holding one fixture video plus an index path that
