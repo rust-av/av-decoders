@@ -1,8 +1,8 @@
 //! Color metadata types.
 //!
-//! These mirror the FFmpeg/libavutil color enumerations, which FFMS2 also uses
-//! for its raw values. VapourSynth frame properties follow the same numbering
-//! for the standard color keys.
+//! Numbering matches the FFmpeg/libavutil enumerations, which FFMS2 also uses.
+//! VapourSynth frame properties share that numbering for `_Primaries`,
+//! `_Transfer` and `_Matrix` only.
 
 /// The pixel value range (limited vs. full) of the video.
 ///
@@ -174,15 +174,12 @@ pub enum ChromaLocation {
 pub type PrimariesXY = ([(f64, f64); 3], (f64, f64));
 
 /// SMPTE ST 2086 mastering display metadata.
-///
-/// Values are only present when the source flags them as such.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct MasteringDisplayMetadata {
     /// CIE 1931 xy chromaticity coordinates of the red, green, and blue
-    /// primaries plus the white point, present only if flagged by the source.
+    /// primaries plus the white point.
     pub primaries: Option<PrimariesXY>,
-    /// Minimum and maximum display luminance in cd/m²,
-    /// present only if flagged by the source.
+    /// Minimum and maximum display luminance in cd/m².
     pub luminance: Option<(f64, f64)>,
 }
 
@@ -200,11 +197,10 @@ macro_rules! raw_color_enum {
         impl $ty {
             /// Converts a raw `FFmpeg`/`FFMS2` integer value into this enum.
             ///
-            /// Returns `None` for values not known to this library
-            /// (e.g. values introduced by a newer `FFmpeg`).
+            /// Returns `None` for values not known to this library.
             #[inline]
             #[must_use]
-            pub const fn from_raw(value: i32) -> Option<Self> {
+            pub const fn from_raw(value: i64) -> Option<Self> {
                 match value {
                     $($value => Some(Self::$variant),)+
                     _ => None,
@@ -292,50 +288,109 @@ raw_color_enum!(
     Bottom = 6,
 );
 
+impl ColorRange {
+    /// Converts a VapourSynth `_Range` value (`0` = limited, `1` = full).
+    #[inline]
+    #[must_use]
+    pub const fn from_vapoursynth_range(value: i64) -> Option<Self> {
+        match value {
+            0 => Some(Self::Limited),
+            1 => Some(Self::Full),
+            _ => None,
+        }
+    }
+
+    /// Converts a VapourSynth `_ColorRange` value (`0` = full, `1` = limited).
+    ///
+    /// `_ColorRange` is deprecated in favour of `_Range`. See [docs](https://www.vapoursynth.com/doc/apireference.html#reserved-frame-properties).
+    #[inline]
+    #[must_use]
+    pub const fn from_vapoursynth_color_range(value: i64) -> Option<Self> {
+        match value {
+            0 => Some(Self::Full),
+            1 => Some(Self::Limited),
+            _ => None,
+        }
+    }
+}
+
+impl ChromaLocation {
+    /// Converts a VapourSynth `_ChromaLocation` value (`0` = left, `5` = bottom).
+    ///
+    /// VapourSynth has no "unspecified" value, so its numbering is one less than
+    /// `AVChromaLocation`.
+    #[inline]
+    #[must_use]
+    pub const fn from_vapoursynth_raw(value: i64) -> Option<Self> {
+        match value {
+            0 => Some(Self::Left),
+            1 => Some(Self::Center),
+            2 => Some(Self::TopLeft),
+            3 => Some(Self::Top),
+            4 => Some(Self::BottomLeft),
+            5 => Some(Self::Bottom),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(feature = "ffmpeg")]
 mod ffmpeg_convert {
+    use std::convert::TryFrom;
+
     use super::{ChromaLocation, ColorPrimaries, ColorRange, ColorSpace, TransferCharacteristic};
 
-    // The FFmpeg wrapper enums are version-gated (their variant sets depend on the
-    // linked FFmpeg), so converting through the raw libavutil value keeps this
-    // crate compiling against any supported FFmpeg version.
-    impl From<ffmpeg_the_third::color::Range> for ColorRange {
+    // The raw value is widened to `i64` because bindgen renders these enums as
+    // `c_int` on Windows and `c_uint` elsewhere.
+    impl TryFrom<ffmpeg_the_third::color::Range> for ColorRange {
+        type Error = ();
+
         #[inline]
-        fn from(value: ffmpeg_the_third::color::Range) -> Self {
+        fn try_from(value: ffmpeg_the_third::color::Range) -> Result<Self, Self::Error> {
             let raw: ffmpeg_the_third::ffi::AVColorRange = value.into();
-            Self::from_raw(raw.0).unwrap_or(Self::Unspecified)
+            Self::from_raw(i64::from(raw.0)).ok_or(())
         }
     }
 
-    impl From<ffmpeg_the_third::color::Primaries> for ColorPrimaries {
+    impl TryFrom<ffmpeg_the_third::color::Primaries> for ColorPrimaries {
+        type Error = ();
+
         #[inline]
-        fn from(value: ffmpeg_the_third::color::Primaries) -> Self {
+        fn try_from(value: ffmpeg_the_third::color::Primaries) -> Result<Self, Self::Error> {
             let raw: ffmpeg_the_third::ffi::AVColorPrimaries = value.into();
-            Self::from_raw(raw.0).unwrap_or(Self::Unspecified)
+            Self::from_raw(i64::from(raw.0)).ok_or(())
         }
     }
 
-    impl From<ffmpeg_the_third::color::TransferCharacteristic> for TransferCharacteristic {
+    impl TryFrom<ffmpeg_the_third::color::TransferCharacteristic> for TransferCharacteristic {
+        type Error = ();
+
         #[inline]
-        fn from(value: ffmpeg_the_third::color::TransferCharacteristic) -> Self {
+        fn try_from(
+            value: ffmpeg_the_third::color::TransferCharacteristic,
+        ) -> Result<Self, Self::Error> {
             let raw: ffmpeg_the_third::ffi::AVColorTransferCharacteristic = value.into();
-            Self::from_raw(raw.0).unwrap_or(Self::Unspecified)
+            Self::from_raw(i64::from(raw.0)).ok_or(())
         }
     }
 
-    impl From<ffmpeg_the_third::color::Space> for ColorSpace {
+    impl TryFrom<ffmpeg_the_third::color::Space> for ColorSpace {
+        type Error = ();
+
         #[inline]
-        fn from(value: ffmpeg_the_third::color::Space) -> Self {
+        fn try_from(value: ffmpeg_the_third::color::Space) -> Result<Self, Self::Error> {
             let raw: ffmpeg_the_third::ffi::AVColorSpace = value.into();
-            Self::from_raw(raw.0).unwrap_or(Self::Unspecified)
+            Self::from_raw(i64::from(raw.0)).ok_or(())
         }
     }
 
-    impl From<ffmpeg_the_third::chroma::Location> for ChromaLocation {
+    impl TryFrom<ffmpeg_the_third::chroma::Location> for ChromaLocation {
+        type Error = ();
+
         #[inline]
-        fn from(value: ffmpeg_the_third::chroma::Location) -> Self {
+        fn try_from(value: ffmpeg_the_third::chroma::Location) -> Result<Self, Self::Error> {
             let raw: ffmpeg_the_third::ffi::AVChromaLocation = value.into();
-            Self::from_raw(raw.0).unwrap_or(Self::Unspecified)
+            Self::from_raw(i64::from(raw.0)).ok_or(())
         }
     }
 }
@@ -391,5 +446,93 @@ mod tests {
         assert_eq!(ColorRange::from_raw(-1), None);
         assert_eq!(ColorSpace::from_raw(-5), None);
         assert_eq!(TransferCharacteristic::from_raw(1000), None);
+    }
+
+    #[test]
+    fn vapoursynth_chroma_location_is_shifted_by_one() {
+        assert_eq!(
+            ChromaLocation::from_vapoursynth_raw(0),
+            Some(ChromaLocation::Left)
+        );
+        assert_eq!(
+            ChromaLocation::from_vapoursynth_raw(1),
+            Some(ChromaLocation::Center)
+        );
+        assert_eq!(
+            ChromaLocation::from_vapoursynth_raw(2),
+            Some(ChromaLocation::TopLeft)
+        );
+        assert_eq!(
+            ChromaLocation::from_vapoursynth_raw(3),
+            Some(ChromaLocation::Top)
+        );
+        assert_eq!(
+            ChromaLocation::from_vapoursynth_raw(4),
+            Some(ChromaLocation::BottomLeft)
+        );
+        assert_eq!(
+            ChromaLocation::from_vapoursynth_raw(5),
+            Some(ChromaLocation::Bottom)
+        );
+        // VapourSynth has no "unspecified" value.
+        assert_eq!(ChromaLocation::from_vapoursynth_raw(6), None);
+        assert_eq!(ChromaLocation::from_vapoursynth_raw(-1), None);
+        assert_eq!(ChromaLocation::from_vapoursynth_raw(i64::MAX), None);
+    }
+
+    #[test]
+    fn vapoursynth_range_properties_are_inverted() {
+        // `_Range`: 0=limited, 1=full.
+        assert_eq!(
+            ColorRange::from_vapoursynth_range(0),
+            Some(ColorRange::Limited)
+        );
+        assert_eq!(
+            ColorRange::from_vapoursynth_range(1),
+            Some(ColorRange::Full)
+        );
+        assert_eq!(ColorRange::from_vapoursynth_range(-1), None);
+        assert_eq!(ColorRange::from_vapoursynth_range(2), None);
+
+        // `_ColorRange` (deprecated): 0=full, 1=limited.
+        assert_eq!(
+            ColorRange::from_vapoursynth_color_range(0),
+            Some(ColorRange::Full)
+        );
+        assert_eq!(
+            ColorRange::from_vapoursynth_color_range(1),
+            Some(ColorRange::Limited)
+        );
+        assert_eq!(ColorRange::from_vapoursynth_color_range(-1), None);
+        assert_eq!(ColorRange::from_vapoursynth_color_range(2), None);
+    }
+
+    #[cfg(feature = "ffmpeg")]
+    #[test]
+    fn ffmpeg_wrapper_conversions_report_unknown_values() {
+        use std::convert::TryFrom;
+
+        assert_eq!(
+            ColorRange::try_from(ffmpeg_the_third::color::Range::JPEG),
+            Ok(ColorRange::Full)
+        );
+        assert_eq!(
+            ColorPrimaries::try_from(ffmpeg_the_third::color::Primaries::BT2020),
+            Ok(ColorPrimaries::BT2020)
+        );
+        assert_eq!(
+            TransferCharacteristic::try_from(
+                ffmpeg_the_third::color::TransferCharacteristic::SMPTE2084
+            ),
+            Ok(TransferCharacteristic::SMPTE2084)
+        );
+        assert_eq!(
+            ColorSpace::try_from(ffmpeg_the_third::color::Space::BT2020NCL),
+            Ok(ColorSpace::BT2020NCL)
+        );
+        assert_eq!(
+            ChromaLocation::try_from(ffmpeg_the_third::chroma::Location::Left),
+            Ok(ChromaLocation::Left)
+        );
     }
 }

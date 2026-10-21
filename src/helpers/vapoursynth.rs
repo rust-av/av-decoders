@@ -172,55 +172,64 @@ impl VapoursynthDecoder {
             })
     }
 
-    pub(crate) fn get_video_details(&self) -> Result<VideoDetails, DecoderError> {
+    /// Returns the video metadata.
+    ///
+    /// Color metadata is only available via
+    /// [`get_extended_video_details`](Self::get_extended_video_details).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecoderError::VapoursynthInternalError`] if the output node
+    /// cannot be obtained.
+    #[inline]
+    pub fn get_video_details(&self) -> Result<VideoDetails, DecoderError> {
         match self.video_details {
             Some(details) => Ok(details),
             None => {
-                let node = self.get_output_node();
-                let details = parse_video_details(node.info())?;
-                Ok(details)
+                let node = self.get_output_node()?;
+                parse_video_details(node.info())
             }
         }
     }
 
     /// Returns the video metadata with color information filled in.
     ///
-    /// Unlike [`get_video_details`](Self::get_video_details), this decodes the first
-    /// frame of the output node to read the standard VapourSynth Frame
-    /// properties (`_ColorRange`, `_Primaries`, `_Transfer`, `_Matrix`,
-    /// `_ChromaLocation`). Properties that are absent or hold values unknown to
-    /// this library are reported as `None`; HDR metadata is not currently read.
-    ///
-    /// This requires decoding a frame of the output node which may not be
-    /// available yet, hence the dedicated method.
+    /// Reads the first frame's VapourSynth properties (`_Range`/`_ColorRange`,
+    /// `_Primaries`, `_Transfer`, `_Matrix`, `_ChromaLocation`). Properties that
+    /// are absent or hold unknown values are reported as `None`. HDR metadata is
+    /// not read.
     ///
     /// # Errors
     ///
     /// Returns [`DecoderError::EndOfFile`] if the first frame cannot be decoded,
-    /// [`DecoderError::VapoursynthInternalError`] if the output node cannot be obtained.
+    /// [`DecoderError::VapoursynthInternalError`] if the output node cannot be
+    /// obtained.
     #[inline]
     pub fn get_extended_video_details(&self) -> Result<VideoDetails, DecoderError> {
-        let mut details = self.get_video_details()?;
+        let node = self.get_output_node()?;
+        let mut details = match self.video_details {
+            Some(details) => details,
+            None => parse_video_details(node.info())?,
+        };
 
-        let node = self.get_output_node();
         let frame = node.get_frame(0).map_err(|_| DecoderError::EndOfFile)?;
 
         let props = frame.props();
-        details.color_range = get_int_prop(&props, "_ColorRange")
-            .and_then(|v| i32::try_from(v).ok())
-            .and_then(crate::color::ColorRange::from_raw);
-        details.color_primaries = get_int_prop(&props, "_Primaries")
-            .and_then(|v| i32::try_from(v).ok())
-            .and_then(crate::color::ColorPrimaries::from_raw);
+        // `_Range` supersedes the deprecated `_ColorRange`.
+        details.color_range = get_int_prop(&props, "_Range")
+            .and_then(crate::color::ColorRange::from_vapoursynth_range)
+            .or_else(|| {
+                get_int_prop(&props, "_ColorRange")
+                    .and_then(crate::color::ColorRange::from_vapoursynth_color_range)
+            });
+        details.color_primaries =
+            get_int_prop(&props, "_Primaries").and_then(crate::color::ColorPrimaries::from_raw);
         details.color_transfer_characteristic = get_int_prop(&props, "_Transfer")
-            .and_then(|v| i32::try_from(v).ok())
             .and_then(crate::color::TransferCharacteristic::from_raw);
-        details.color_space = get_int_prop(&props, "_Matrix")
-            .and_then(|v| i32::try_from(v).ok())
-            .and_then(crate::color::ColorSpace::from_raw);
+        details.color_space =
+            get_int_prop(&props, "_Matrix").and_then(crate::color::ColorSpace::from_raw);
         details.chroma_location = get_int_prop(&props, "_ChromaLocation")
-            .and_then(|v| i32::try_from(v).ok())
-            .and_then(crate::color::ChromaLocation::from_raw);
+            .and_then(crate::color::ChromaLocation::from_vapoursynth_raw);
 
         Ok(details)
     }
@@ -239,43 +248,14 @@ impl VapoursynthDecoder {
             return Err(DecoderError::EndOfFile);
         }
 
-        let node = {
-            let output_node = match self.env.get_output(self.output_index) {
-                Ok(output) => {
-                    let (output_node, _) = output;
-                    Some(output_node)
-                }
-                Err(vapoursynth::vsscript::Error::NoOutput) => {
-                    if self.modify_node.is_some() {
-                        None
-                    } else {
-                        panic!("output node exists--validated during initialization");
-                    }
-                }
-                Err(_) => panic!("unexpected error when getting output node"),
-            };
-            if let Some(modify_node) = self.modify_node.as_ref() {
-                let core =
-                    self.env
-                        .get_core()
-                        .map_err(|e| DecoderError::VapoursynthInternalError {
-                            cause: e.to_string(),
-                        })?;
-                modify_node(core, output_node).map_err(|e| {
-                    DecoderError::VapoursynthInternalError {
-                        cause: e.to_string(),
-                    }
-                })?
-            } else {
-                output_node.expect("output node exists--validated during initialization")
-            }
-        };
-
-        // Lazy load the total frame count
+        // Lazy load the total frame count.
         if self.video_details.is_none() {
-            let video_details = parse_video_details(node.info())?;
-            self.video_details = Some(video_details);
+            let node =
+                Self::get_output_from(&self.env, self.output_index, self.modify_node.as_ref())?;
+            self.video_details = Some(parse_video_details(node.info())?);
         }
+
+        let node = self.get_output_node()?;
 
         let vs_frame = node
             .get_frame(frame_index)
@@ -340,9 +320,12 @@ impl VapoursynthDecoder {
     }
 
     /// Returns the VapourSynth output node, applying the registered modifier if any.
-    pub(crate) fn get_output_node(&self) -> Node<'_> {
+    ///
+    /// # Errors
+    ///
+    /// Forwards errors from [`get_output`](Self::get_output).
+    pub(crate) fn get_output_node(&self) -> Result<Node<'_>, DecoderError> {
         self.get_output(self.output_index, self.modify_node.as_ref())
-            .expect("output node exists--validated during initialization")
     }
 
     /// Returns the index of the VapourSynth output node.
@@ -372,7 +355,16 @@ impl VapoursynthDecoder {
         index: i32,
         modify_node: Option<&ModifyNode>,
     ) -> Result<Node<'_>, DecoderError> {
-        let output_node = match self.env.get_output(index) {
+        Self::get_output_from(&self.env, index, modify_node)
+    }
+
+    /// Same as [`get_output`](Self::get_output) but borrows only the environment.
+    fn get_output_from<'a>(
+        env: &'a Environment,
+        index: i32,
+        modify_node: Option<&ModifyNode>,
+    ) -> Result<Node<'a>, DecoderError> {
+        let output_node = match env.get_output(index) {
             Ok(output) => {
                 let (output_node, _) = output;
                 Ok(Some(output_node))
@@ -381,17 +373,17 @@ impl VapoursynthDecoder {
                 if modify_node.is_some() {
                     Ok(None)
                 } else {
-                    // panic!("output node does not exist");
                     Err(map_vsscript_error(&vapoursynth::vsscript::Error::NoOutput))
                 }
             }
-            Err(_) => panic!("unexpected error when getting output node"),
+            Err(e) => Err(map_vsscript_error(&e)),
         }?;
         if let Some(modify_node) = modify_node {
-            let core = self
-                .env
+            let core = env
                 .get_core()
-                .expect("core exists--validated during initialization");
+                .map_err(|e| DecoderError::VapoursynthInternalError {
+                    cause: e.to_string(),
+                })?;
             modify_node(core, output_node)
         } else {
             output_node.map_or_else(

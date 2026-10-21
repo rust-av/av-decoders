@@ -2,10 +2,10 @@
 
 ## Version 0.12.0
 
-- feat!: add color and HDR metadata to `VideoDetails`: `color_range`, `color_primaries`, `color_trc`, `color_space`, `chroma_location`, `mastering_display`, and `content_light_level` (this breaks struct-literal construction of `VideoDetails`)
+- feat!: add color and HDR metadata to `VideoDetails`: `color_range`, `color_primaries`, `color_transfer_characteristic`, `color_space`, `chroma_location`, `mastering_display`, and `content_light_level` (this breaks struct-literal construction of `VideoDetails`)
 - feat: add backend-agnostic color enums (`ColorRange`, `ColorPrimaries`, `TransferCharacteristic`, `ColorSpace`, `ChromaLocation`) and HDR types (`MasteringDisplayMetadata`, `ContentLightLevel`)
 - feat: populate color and HDR metadata in the FFMS2 and FFmpeg backends
-- feat: add `VapoursynthDecoder::get_extended_video_details`, which decodes the first frame to read color frame properties
+- feat: add `VapoursynthDecoder::get_extended_video_details`, which decodes the first frame to read color frame properties; `VapoursynthDecoder::get_video_details` is now public
 
 ## Version 0.11.1
 

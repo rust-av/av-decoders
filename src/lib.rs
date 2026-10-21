@@ -60,7 +60,7 @@ pub use crate::helpers::vapoursynth::VapoursynthDecoder;
 use crate::helpers::vapoursynth::{VariableName, VariableValue};
 pub use color::{
     ChromaLocation, ColorPrimaries, ColorRange, ColorSpace, ContentLightLevel,
-    MasteringDisplayMetadata, TransferCharacteristic,
+    MasteringDisplayMetadata, PrimariesXY, TransferCharacteristic,
 };
 pub use error::DecoderError;
 pub use num_rational::Rational32;
@@ -93,28 +93,23 @@ pub struct VideoDetails {
     pub total_frames: Option<usize>,
     /// The pixel value range (limited vs. full), if known.
     ///
-    /// `None` when the backend does not provide this information;
-    /// `Some(ColorRange::Unspecified)` when the source explicitly leaves it unspecified.
+    /// `None` if unknown, `Some(ColorRange::Unspecified)` if explicitly unspecified.
     pub color_range: Option<ColorRange>,
     /// The color primaries (gamut), if known.
     ///
-    /// `None` when the backend does not provide this information;
-    /// `Some(ColorPrimaries::Unspecified)` when the source explicitly leaves it unspecified.
+    /// `None` if unknown, `Some(ColorPrimaries::Unspecified)` if explicitly unspecified.
     pub color_primaries: Option<ColorPrimaries>,
     /// The transfer characteristics, if known.
     ///
-    /// `None` when the backend does not provide this information;
-    /// `Some(TransferCharacteristic::Unspecified)` when the source explicitly leaves it unspecified.
+    /// `None` if unknown, `Some(TransferCharacteristic::Unspecified)` if explicitly unspecified.
     pub color_transfer_characteristic: Option<TransferCharacteristic>,
     /// The color space / matrix coefficients, if known.
     ///
-    /// `None` when the backend does not provide this information;
-    /// `Some(ColorSpace::Unspecified)` when the source explicitly leaves it unspecified.
+    /// `None` if unknown, `Some(ColorSpace::Unspecified)` if explicitly unspecified.
     pub color_space: Option<ColorSpace>,
     /// The chroma sample location, if known.
     ///
-    /// `None` when the backend does not provide this information;
-    /// `Some(ChromaLocation::Unspecified)` when the source explicitly leaves it unspecified.
+    /// `None` if unknown, `Some(ChromaLocation::Unspecified)` if explicitly unspecified.
     pub chroma_location: Option<ChromaLocation>,
     /// SMPTE ST 2086 mastering display metadata, if known.
     pub mastering_display: Option<MasteringDisplayMetadata>,

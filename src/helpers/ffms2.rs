@@ -310,11 +310,12 @@ impl Ffms2Decoder {
             let (bit_depth, chroma_sampling) = pixel_format_to_video_info(pix_fmt)?;
 
             // Color metadata is passed through by FFMS2 using FFmpeg numbering
-            let color_range = ColorRange::from_raw((*frame).ColorRange);
-            let color_primaries = ColorPrimaries::from_raw((*frame).ColorPrimaries);
-            let color_trc = TransferCharacteristic::from_raw((*frame).TransferCharateristics);
-            let color_space = ColorSpace::from_raw((*frame).ColorSpace);
-            let chroma_location = ChromaLocation::from_raw((*frame).ChromaLocation);
+            let color_range = ColorRange::from_raw(i64::from((*frame).ColorRange));
+            let color_primaries = ColorPrimaries::from_raw(i64::from((*frame).ColorPrimaries));
+            let color_trc =
+                TransferCharacteristic::from_raw(i64::from((*frame).TransferCharateristics));
+            let color_space = ColorSpace::from_raw(i64::from((*frame).ColorSpace));
+            let chroma_location = ChromaLocation::from_raw(i64::from((*frame).ChromaLocation));
 
             let mastering_display = ((*frame).HasMasteringDisplayPrimaries != 0
                 || (*frame).HasMasteringDisplayLuminance != 0)

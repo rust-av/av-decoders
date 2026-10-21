@@ -88,11 +88,21 @@ impl FfmpegDecoder {
         let frame_rate = input.rate();
 
         let parameters = input.parameters();
-        let color_range: ColorRange = parameters.color_range().into();
-        let color_primaries: ColorPrimaries = parameters.color_primaries().into();
-        let color_trc: TransferCharacteristic = parameters.color_transfer_characteristic().into();
-        let color_space: ColorSpace = parameters.color_space().into();
-        let chroma_location: ChromaLocation = parameters.chroma_location().into();
+        // Reads the raw libavutil values, as the wrapper accessors panic on values
+        // their variant sets do not know about.
+        let (color_range, color_primaries, color_trc, color_space, chroma_location) =
+            // SAFETY: `as_ptr()` points to the `AVCodecParameters` owned by the
+            // input context, which outlives this borrow.
+            unsafe {
+                let raw = &*parameters.as_ptr();
+                (
+                    ColorRange::from_raw(i64::from(raw.color_range.0)),
+                    ColorPrimaries::from_raw(i64::from(raw.color_primaries.0)),
+                    TransferCharacteristic::from_raw(i64::from(raw.color_trc.0)),
+                    ColorSpace::from_raw(i64::from(raw.color_space.0)),
+                    ChromaLocation::from_raw(i64::from(raw.chroma_location.0)),
+                )
+            };
         let (mastering_display, content_light_level) = parse_hdr_side_data(&parameters);
 
         Ok(Self {
@@ -139,11 +149,11 @@ impl FfmpegDecoder {
                 },
                 frame_rate: Rational32::new(frame_rate.numerator(), frame_rate.denominator()),
                 total_frames: total_frames.try_into().ok(),
-                color_range: Some(color_range),
-                color_primaries: Some(color_primaries),
-                color_transfer_characteristic: Some(color_trc),
-                color_space: Some(color_space),
-                chroma_location: Some(chroma_location),
+                color_range,
+                color_primaries,
+                color_transfer_characteristic: color_trc,
+                color_space,
+                chroma_location,
                 mastering_display,
                 content_light_level,
             },
@@ -245,10 +255,8 @@ impl FfmpegDecoder {
     }
 }
 
-/// Mirror of FFmpeg's `AVMasteringDisplayMetadata` for reading raw side data.
-///
-/// The FFmpeg sys bindings do not expose this struct, so it is re-declared here
-/// with the exact upstream layout and validated by size before each read.
+/// Mirror of FFmpeg's `AVMasteringDisplayMetadata`, which the bindings do not
+/// expose.
 #[repr(C)]
 struct RawMasteringDisplayMetadata {
     display_primaries: [[ffmpeg::ffi::AVRational; 2]; 3],
@@ -259,7 +267,7 @@ struct RawMasteringDisplayMetadata {
     has_luminance: std::ffi::c_int,
 }
 
-/// Mirror of FFmpeg's `AVContentLightMetadata` for reading raw side data.
+/// Mirror of FFmpeg's `AVContentLightMetadata`, which the bindings do not expose.
 #[repr(C)]
 struct RawContentLightMetadata {
     max_cll: std::ffi::c_uint,
@@ -274,6 +282,62 @@ fn rational_to_f64(value: ffmpeg::ffi::AVRational) -> f64 {
     }
 }
 
+/// Converts FFmpeg's raw mastering display struct into the public type.
+fn mastering_display_from_raw(raw: &RawMasteringDisplayMetadata) -> MasteringDisplayMetadata {
+    MasteringDisplayMetadata {
+        primaries: (raw.has_primaries != 0).then(|| {
+            let primaries = raw
+                .display_primaries
+                .map(|primary| (rational_to_f64(primary[0]), rational_to_f64(primary[1])));
+            let white_point = (
+                rational_to_f64(raw.white_point[0]),
+                rational_to_f64(raw.white_point[1]),
+            );
+            (primaries, white_point)
+        }),
+        luminance: (raw.has_luminance != 0).then(|| {
+            (
+                rational_to_f64(raw.min_luminance),
+                rational_to_f64(raw.max_luminance),
+            )
+        }),
+    }
+}
+
+/// Decodes a serialized `AVMasteringDisplayMetadata` buffer.
+///
+/// Returns `None` if the buffer is too short to hold the struct.
+fn read_mastering_display(data: &[u8]) -> Option<MasteringDisplayMetadata> {
+    if data.len() < std::mem::size_of::<RawMasteringDisplayMetadata>() {
+        return None;
+    }
+
+    // SAFETY: the buffer length was checked against the struct size above;
+    // `read_unaligned` handles any alignment.
+    let raw =
+        unsafe { std::ptr::read_unaligned(data.as_ptr() as *const RawMasteringDisplayMetadata) };
+
+    Some(mastering_display_from_raw(&raw))
+}
+
+/// Decodes a serialized `AVContentLightMetadata` buffer.
+///
+/// Returns `None` if the buffer is too short to hold the struct.
+fn read_content_light_level(data: &[u8]) -> Option<ContentLightLevel> {
+    if data.len() < std::mem::size_of::<RawContentLightMetadata>() {
+        return None;
+    }
+
+    // SAFETY: the buffer length was checked against the struct size above;
+    // `read_unaligned` handles any alignment.
+    let raw = unsafe { std::ptr::read_unaligned(data.as_ptr() as *const RawContentLightMetadata) };
+
+    Some(ContentLightLevel {
+        max_cll: raw.max_cll,
+        max_fall: raw.max_fall,
+    })
+}
+
 /// Extracts HDR metadata from the stream's coded side data, if present.
 fn parse_hdr_side_data(
     parameters: &ffmpeg::codec::ParametersRef<'_>,
@@ -285,16 +349,15 @@ fn parse_hdr_side_data(
     // by the input context, and the side-data array is valid for `nb_coded_side_data`
     // entries for as long as the context is alive.
     let side_data = unsafe {
-        let ptr = (*parameters.as_ptr()).coded_side_data;
-        let count = (*parameters.as_ptr()).nb_coded_side_data;
-        if ptr.is_null() || count <= 0 {
+        let params = &*parameters.as_ptr();
+        if params.coded_side_data.is_null() || params.nb_coded_side_data <= 0 {
             return (mastering_display, content_light_level);
         }
-        std::slice::from_raw_parts(ptr, count as usize)
+        std::slice::from_raw_parts(params.coded_side_data, params.nb_coded_side_data as usize)
     };
 
     for entry in side_data {
-        // SAFETY: `entry.data` was checked for null and `entry.size` is the
+        // SAFETY: `entry.data` is checked for null and `entry.size` is the
         // buffer length as reported by FFmpeg for this side-data entry.
         let data = unsafe {
             if entry.data.is_null() {
@@ -302,48 +365,12 @@ fn parse_hdr_side_data(
             }
             std::slice::from_raw_parts(entry.data, entry.size)
         };
-        match packet::side_data::Type::from(entry.type_) {
-            packet::side_data::Type::MasteringDisplayMetadata
-                if data.len() >= std::mem::size_of::<RawMasteringDisplayMetadata>() =>
-            {
-                // SAFETY: the buffer length was checked against the struct size above;
-                // `read_unaligned` handles any alignment.
-                let raw = unsafe {
-                    std::ptr::read_unaligned(data.as_ptr() as *const RawMasteringDisplayMetadata)
-                };
-                mastering_display = Some(MasteringDisplayMetadata {
-                    primaries: (raw.has_primaries != 0).then(|| {
-                        let primaries = raw.display_primaries.map(|primary| {
-                            (rational_to_f64(primary[0]), rational_to_f64(primary[1]))
-                        });
-                        let white_point = (
-                            rational_to_f64(raw.white_point[0]),
-                            rational_to_f64(raw.white_point[1]),
-                        );
-                        (primaries, white_point)
-                    }),
-                    luminance: (raw.has_luminance != 0).then(|| {
-                        (
-                            rational_to_f64(raw.min_luminance),
-                            rational_to_f64(raw.max_luminance),
-                        )
-                    }),
-                });
-            }
-            packet::side_data::Type::ContentLightLevel
-                if data.len() >= std::mem::size_of::<RawContentLightMetadata>() =>
-            {
-                // SAFETY: the buffer length was checked against the struct size above;
-                // `read_unaligned` handles any alignment.
-                let raw = unsafe {
-                    std::ptr::read_unaligned(data.as_ptr() as *const RawContentLightMetadata)
-                };
-                content_light_level = Some(ContentLightLevel {
-                    max_cll: raw.max_cll,
-                    max_fall: raw.max_fall,
-                });
-            }
-            _ => {}
+        // Compares the raw side-data type directly, since `packet::side_data::Type`
+        // panics on unknown types.
+        if entry.type_ == ffmpeg::ffi::AVPacketSideDataType::MASTERING_DISPLAY_METADATA {
+            mastering_display = read_mastering_display(data).or(mastering_display);
+        } else if entry.type_ == ffmpeg::ffi::AVPacketSideDataType::CONTENT_LIGHT_LEVEL {
+            content_light_level = read_content_light_level(data).or(content_light_level);
         }
     }
 
@@ -354,9 +381,8 @@ fn parse_hdr_side_data(
 mod tests {
     use super::*;
 
-    #[test]
-    fn parses_mastering_display_metadata_bytes() {
-        // AVMasteringDisplayMetadata with primaries and luminance set
+    /// Builds a serialized `AVMasteringDisplayMetadata` buffer.
+    fn mastering_display_bytes(has_primaries: i32, has_luminance: i32) -> Vec<u8> {
         let mut bytes = Vec::new();
         for value in [
             (17i32, 25i32), // r x
@@ -370,35 +396,17 @@ mod tests {
             (1, 10000),     // min luminance
             (1000, 1),      // max luminance
         ] {
-            bytes.extend_from_slice(&value.0.to_le_bytes());
-            bytes.extend_from_slice(&value.1.to_le_bytes());
+            bytes.extend_from_slice(&value.0.to_ne_bytes());
+            bytes.extend_from_slice(&value.1.to_ne_bytes());
         }
-        bytes.extend_from_slice(&1i32.to_le_bytes()); // has_primaries
-        bytes.extend_from_slice(&1i32.to_le_bytes()); // has_luminance
+        bytes.extend_from_slice(&has_primaries.to_ne_bytes());
+        bytes.extend_from_slice(&has_luminance.to_ne_bytes());
+        bytes
+    }
 
-        // SAFETY: `bytes` holds exactly the layout of `RawMasteringDisplayMetadata`
-        // as constructed above; `read_unaligned` handles any alignment.
-        let raw = unsafe {
-            std::ptr::read_unaligned(bytes.as_ptr() as *const RawMasteringDisplayMetadata)
-        };
-        let metadata = MasteringDisplayMetadata {
-            primaries: (raw.has_primaries != 0).then(|| {
-                let primaries = raw
-                    .display_primaries
-                    .map(|primary| (rational_to_f64(primary[0]), rational_to_f64(primary[1])));
-                let white_point = (
-                    rational_to_f64(raw.white_point[0]),
-                    rational_to_f64(raw.white_point[1]),
-                );
-                (primaries, white_point)
-            }),
-            luminance: (raw.has_luminance != 0).then(|| {
-                (
-                    rational_to_f64(raw.min_luminance),
-                    rational_to_f64(raw.max_luminance),
-                )
-            }),
-        };
+    #[test]
+    fn parses_mastering_display_metadata_bytes() {
+        let metadata = read_mastering_display(&mastering_display_bytes(1, 1)).expect("full buffer");
 
         let (primaries, white_point) = metadata.primaries.expect("primaries flagged");
         assert_eq!(primaries[0], (0.68, 0.32));
@@ -409,21 +417,52 @@ mod tests {
     }
 
     #[test]
-    fn parses_content_light_level_bytes() {
-        let bytes = [1000u32.to_le_bytes(), 400u32.to_le_bytes()].concat();
+    fn mastering_display_respects_optional_flags() {
+        let both_off = read_mastering_display(&mastering_display_bytes(0, 0)).expect("full buffer");
+        assert_eq!(both_off.primaries, None);
+        assert_eq!(both_off.luminance, None);
 
-        // SAFETY: `bytes` holds exactly the layout of `RawContentLightMetadata`
-        // as constructed above; `read_unaligned` handles any alignment.
-        let raw =
-            unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const RawContentLightMetadata) };
-        assert_eq!(raw.max_cll, 1000);
-        assert_eq!(raw.max_fall, 400);
+        let primaries_only =
+            read_mastering_display(&mastering_display_bytes(1, 0)).expect("full buffer");
+        assert!(primaries_only.primaries.is_some());
+        assert_eq!(primaries_only.luminance, None);
+
+        let luminance_only =
+            read_mastering_display(&mastering_display_bytes(0, 1)).expect("full buffer");
+        assert_eq!(luminance_only.primaries, None);
+        assert_eq!(luminance_only.luminance, Some((0.0001, 1000.0)));
     }
 
     #[test]
-    fn mirror_structs_match_ffmpeg_layout() {
-        // The mastering display struct is 10 rationals (6 primaries + 2 white
-        // point + 2 luminance) plus two c_int flags.
+    fn short_mastering_display_buffer_is_rejected() {
+        let bytes = mastering_display_bytes(1, 1);
+        assert!(read_mastering_display(&bytes[..bytes.len() - 1]).is_none());
+        assert!(read_mastering_display(&[]).is_none());
+    }
+
+    #[test]
+    fn parses_content_light_level_bytes() {
+        let bytes = [1000u32.to_ne_bytes(), 400u32.to_ne_bytes()].concat();
+        assert_eq!(
+            read_content_light_level(&bytes),
+            Some(ContentLightLevel {
+                max_cll: 1000,
+                max_fall: 400,
+            })
+        );
+    }
+
+    #[test]
+    fn short_content_light_level_buffer_is_rejected() {
+        let bytes = [1000u32.to_ne_bytes(), 400u32.to_ne_bytes()].concat();
+        assert!(read_content_light_level(&bytes[..bytes.len() - 1]).is_none());
+        assert!(read_content_light_level(&[]).is_none());
+    }
+
+    #[test]
+    fn mirror_structs_are_unpadded() {
+        // Both mirrors are `repr(C)` with only 4-byte fields, so this guards
+        // against accidental padding rather than validating FFmpeg's layout.
         assert_eq!(
             std::mem::size_of::<RawMasteringDisplayMetadata>(),
             10 * std::mem::size_of::<ffmpeg::ffi::AVRational>()

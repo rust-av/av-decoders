@@ -131,8 +131,7 @@ pub struct VideoDetails {
 }
 ```
 
-Color metadata is populated by the FFMS2 and FFmpeg backends; Y4M files carry no color metadata, so those fields are `None`.
-The VapourSynth decoder reports `None` from `get_video_details()` but offers `VapoursynthDecoder::get_extended_video_details()`, which decodes the first frame to read the standard color frame properties.
+The FFMS2 and FFmpeg backends populate color metadata; Y4M files carry none. The VapourSynth decoder's `get_video_details()` returns `None` for those fields; `VapoursynthDecoder::get_extended_video_details()` decodes the first frame to read `_Range` (falling back to the deprecated `_ColorRange`), `_Primaries`, `_Transfer`, `_Matrix` and `_ChromaLocation`. VapourSynth frame properties carry no HDR metadata.
 
 ## Backend Selection
 
