@@ -54,6 +54,14 @@ pub enum DecoderError {
         cause: String,
     },
 
+    /// FFMS2 indexing was cancelled by the caller (requires `ffms2` feature).
+    #[cfg(feature = "ffms2")]
+    #[error("FFMS2 indexing was cancelled ({cause})")]
+    IndexingCancelled {
+        /// The underlying cause of the error.
+        cause: String,
+    },
+
     /// Catch-all for decoding problems not covered by other variants.
     #[error("internal decoder error ({cause})")]
     GenericDecodeError {

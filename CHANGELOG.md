@@ -2,6 +2,8 @@
 
 ## Version 0.12.0
 
+- feat: add `Ffms2Decoder::with_index` to open a video against a caller-chosen index path, and `Ffms2Decoder::build_index` to build or validate an index with progress and cancellation support
+- feat: add `IndexProgress` and `IndexCancelled` callback types for the above
 - feat!: add color and HDR metadata to `VideoDetails`: `color_range`, `color_primaries`, `color_transfer_characteristic`, `color_space`, `chroma_location`, `mastering_display`, and `content_light_level` (this breaks struct-literal construction of `VideoDetails`)
 - feat: add backend-agnostic color enums (`ColorRange`, `ColorPrimaries`, `TransferCharacteristic`, `ColorSpace`, `ChromaLocation`) and HDR types (`MasteringDisplayMetadata`, `ContentLightLevel`)
 - feat: populate color and HDR metadata in the FFMS2 and FFmpeg backends

@@ -51,7 +51,7 @@ mod util;
 #[cfg(feature = "ffmpeg")]
 pub use crate::helpers::ffmpeg::FfmpegDecoder;
 #[cfg(feature = "ffms2")]
-pub use crate::helpers::ffms2::Ffms2Decoder;
+pub use crate::helpers::ffms2::{Ffms2Decoder, IndexCancelled, IndexProgress};
 #[cfg(feature = "vapoursynth")]
 pub use crate::helpers::vapoursynth::ModifyNode;
 #[cfg(feature = "vapoursynth")]
