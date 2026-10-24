@@ -23,6 +23,14 @@ pub fn get_video_details<R: Read>(dec: &y4m::Decoder<R>) -> VideoDetails {
         chroma_sampling,
         frame_rate,
         total_frames: None,
+        // Y4M headers do not carry color metadata
+        color_range: None,
+        color_primaries: None,
+        color_transfer_characteristic: None,
+        color_space: None,
+        chroma_location: None,
+        mastering_display: None,
+        content_light_level: None,
     }
 }
 

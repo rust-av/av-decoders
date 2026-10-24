@@ -120,8 +120,18 @@ pub struct VideoDetails {
     pub bit_depth: usize,       // Bits per color component
     pub chroma_sampling: ChromaSampling, // Subsampling format
     pub frame_rate: Rational32, // Frames per second
+    pub total_frames: Option<usize>, // Total frame count, if known
+    pub color_range: Option<ColorRange>, // Limited vs. full range, if known
+    pub color_primaries: Option<ColorPrimaries>, // Color gamut, if known
+    pub color_transfer_characteristic: Option<TransferCharacteristic>, // Transfer characteristics, if known
+    pub color_space: Option<ColorSpace>, // Matrix coefficients, if known
+    pub chroma_location: Option<ChromaLocation>, // Chroma siting, if known
+    pub mastering_display: Option<MasteringDisplayMetadata>, // SMPTE ST 2086, if known
+    pub content_light_level: Option<ContentLightLevel>, // CTA-861.3, if known
 }
 ```
+
+The FFMS2 and FFmpeg backends populate color metadata; Y4M files carry none. The VapourSynth decoder's `get_video_details()` returns `None` for those fields; `VapoursynthDecoder::get_extended_video_details()` decodes the first frame to read `_Range` (falling back to the deprecated `_ColorRange`), `_Primaries`, `_Transfer`, `_Matrix` and `_ChromaLocation`. VapourSynth frame properties carry no HDR metadata.
 
 ## Backend Selection
 

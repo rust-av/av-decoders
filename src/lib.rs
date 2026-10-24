@@ -34,6 +34,7 @@ use v_frame::chroma::ChromaSubsampling;
 use v_frame::frame::Frame;
 use v_frame::pixel::Pixel;
 
+mod color;
 mod error;
 mod helpers {
     #[cfg(feature = "ffmpeg")]
@@ -57,6 +58,10 @@ pub use crate::helpers::vapoursynth::ModifyNode;
 pub use crate::helpers::vapoursynth::VapoursynthDecoder;
 #[cfg(feature = "vapoursynth")]
 use crate::helpers::vapoursynth::{VariableName, VariableValue};
+pub use color::{
+    ChromaLocation, ColorPrimaries, ColorRange, ColorSpace, ContentLightLevel,
+    MasteringDisplayMetadata, PrimariesXY, TransferCharacteristic,
+};
 pub use error::DecoderError;
 pub use num_rational::Rational32;
 pub use v_frame;
@@ -86,6 +91,30 @@ pub struct VideoDetails {
     pub frame_rate: Rational32,
     /// Total number of frames, if known.
     pub total_frames: Option<usize>,
+    /// The pixel value range (limited vs. full), if known.
+    ///
+    /// `None` if unknown, `Some(ColorRange::Unspecified)` if explicitly unspecified.
+    pub color_range: Option<ColorRange>,
+    /// The color primaries (gamut), if known.
+    ///
+    /// `None` if unknown, `Some(ColorPrimaries::Unspecified)` if explicitly unspecified.
+    pub color_primaries: Option<ColorPrimaries>,
+    /// The transfer characteristics, if known.
+    ///
+    /// `None` if unknown, `Some(TransferCharacteristic::Unspecified)` if explicitly unspecified.
+    pub color_transfer_characteristic: Option<TransferCharacteristic>,
+    /// The color space / matrix coefficients, if known.
+    ///
+    /// `None` if unknown, `Some(ColorSpace::Unspecified)` if explicitly unspecified.
+    pub color_space: Option<ColorSpace>,
+    /// The chroma sample location, if known.
+    ///
+    /// `None` if unknown, `Some(ChromaLocation::Unspecified)` if explicitly unspecified.
+    pub chroma_location: Option<ChromaLocation>,
+    /// SMPTE ST 2086 mastering display metadata, if known.
+    pub mastering_display: Option<MasteringDisplayMetadata>,
+    /// CTA-861.3 content light level information, if known.
+    pub content_light_level: Option<ContentLightLevel>,
 }
 
 /// A set of possible configuration flags that are generic across all decoders.
@@ -106,6 +135,13 @@ impl Default for VideoDetails {
             chroma_sampling: ChromaSubsampling::Yuv420,
             frame_rate: Rational32::new(30, 1),
             total_frames: None,
+            color_range: None,
+            color_primaries: None,
+            color_transfer_characteristic: None,
+            color_space: None,
+            chroma_location: None,
+            mastering_display: None,
+            content_light_level: None,
         }
     }
 }
